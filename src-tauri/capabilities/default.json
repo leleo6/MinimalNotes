@@ -1,0 +1,14 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema.json",
+  "identifier": "default",
+  "windows": ["*"],
+  "permissions": [
+    "core:default",
+    "store:default",
+    "dialog:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-close",
+    "core:event:allow-listen",
+    "core:event:allow-emit"
+  ]
+}

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Configuración — MinimalNotes</title>
+  <!-- Aplicar tema ANTES del primer pintado CSS para evitar el flash -->
+  <script>
+    (function() {
+      var params = new URLSearchParams(window.location.search);
+      var t = params.get('theme') || localStorage.getItem('mn-theme');
+      if (t) document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
+  <link rel="stylesheet" href="css/settings.css" />
+</head>
+<body>
+  <div class="settings-shell">
+    <header class="settings-header">
+      <h1>Configuración</h1>
+      <p class="settings-subtitle">Personaliza tu experiencia de escritura</p>
+    </header>
+
+    <main class="settings-body">
+
+      <!-- Sección: Temas -->
+      <section class="settings-section">
+        <h2 class="section-title">Tema y Apariencia</h2>
+        <div class="setting-row">
+          <div class="setting-info">
+            <label class="setting-label" for="themeSelect">Apariencia</label>
+            <span class="setting-desc">Elige entre modo claro, oscuro o sepia</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="themeSelect">
+              <option value="light">Claro</option>
+              <option value="dark">Oscuro 🌙</option>
+              <option value="sepia">Sepia 🍂</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sección: Tipografía -->
+      <section class="settings-section">
+        <h2 class="section-title">Tipografía</h2>
+
+        <!-- Tamaño de fuente -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <label class="setting-label">Tamaño de letra</label>
+            <span class="setting-desc">Tamaño del texto en el editor</span>
+          </div>
+          <div class="setting-control">
+            <button class="stepper-btn" id="fontSizeDec" aria-label="Reducir tamaño">−</button>
+            <span class="stepper-value" id="fontSizeVal">16</span>
+            <span class="stepper-unit">px</span>
+            <button class="stepper-btn" id="fontSizeInc" aria-label="Aumentar tamaño">+</button>
+          </div>
+        </div>
+
+        <!-- Altura de línea -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <label class="setting-label">Altura de línea</label>
+            <span class="setting-desc">Espaciado entre renglones</span>
+          </div>
+          <div class="setting-control">
+            <button class="stepper-btn" id="lineHeightDec" aria-label="Reducir altura">−</button>
+            <span class="stepper-value" id="lineHeightVal">1.8</span>
+            <button class="stepper-btn" id="lineHeightInc" aria-label="Aumentar altura">+</button>
+          </div>
+        </div>
+
+        <!-- Familia tipográfica -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <label class="setting-label" for="fontFamilySelect">Fuente</label>
+            <span class="setting-desc">Tipo de letra del editor</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="fontFamilySelect">
+              <option value="system">Sistema (sans-serif)</option>
+              <option value="serif">Lora (serif)</option>
+              <option value="mono">JetBrains Mono</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sección: Editor -->
+      <section class="settings-section">
+        <h2 class="section-title">Editor</h2>
+
+        <!-- Ancho máximo -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <label class="setting-label" for="editorWidthSelect">Ancho del editor</label>
+            <span class="setting-desc">Limita el ancho máximo del texto</span>
+          </div>
+          <div class="setting-control">
+            <select class="setting-select" id="editorWidthSelect">
+              <option value="none">Sin límite</option>
+              <option value="600px">Estrecho (600px)</option>
+              <option value="800px">Medio (800px)</option>
+              <option value="1000px">Amplio (1000px)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Placeholder -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <label class="setting-label" for="placeholderInput">Texto de marcador</label>
+            <span class="setting-desc">Texto que aparece cuando el editor está vacío</span>
+          </div>
+          <div class="setting-control stretch">
+            <input class="setting-input" id="placeholderInput" type="text" maxlength="40" placeholder="Escribe algo…" />
+          </div>
+        </div>
+
+        <!-- Guardado automático -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <label class="setting-label" for="autoSaveToggle">Guardado automático</label>
+            <span class="setting-desc">Guarda los cambios en el archivo físico al escribir (si ya existe)</span>
+          </div>
+          <div class="setting-control">
+            <input class="setting-checkbox" id="autoSaveToggle" type="checkbox" />
+          </div>
+        </div>
+
+        <!-- Límite de notas en caché -->
+        <div class="setting-row">
+          <div class="setting-info">
+            <label class="setting-label">Límite de notas en caché</label>
+            <span class="setting-desc">Máximo de notas sin guardar. Al superar el límite se borra la más antigua</span>
+          </div>
+          <div class="setting-control">
+            <button class="stepper-btn" id="maxNotesDec" aria-label="Reducir límite">−</button>
+            <span class="stepper-value" id="maxNotesVal">10</span>
+            <button class="stepper-btn" id="maxNotesInc" aria-label="Aumentar límite">+</button>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <footer class="settings-footer">
+      <button class="btn-reset" id="btnReset">Restaurar</button>
+      <button class="btn-apply" id="btnApply">Listo</button>
+    </footer>
+  </div>
+
+  <script type="module" src="js/settings.js"></script>
+</body>
+</html>

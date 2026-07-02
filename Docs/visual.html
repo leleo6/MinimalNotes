@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F6F5F0;
+    --paper-raised:#FCFBF8;
+    --ink:#232320;
+    --ink-soft:#4A4A44;
+    --muted:#93907F;
+    --line:#E1DDD0;
+    --line-strong:#CFC9B8;
+    --accent:#46573D;
+    --accent-soft:#E3E9DA;
+    --danger:#9A4B3B;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .app{
+    display:flex;
+    height:100vh;
+    overflow:hidden;
+  }
+
+  /* -------- Sidebar -------- */
+  .sidebar{
+    width:300px;
+    min-width:300px;
+    background:var(--paper);
+    border-right:1px solid var(--line);
+    display:flex;
+    position:relative;
+  }
+  .spine{
+    width:22px;
+    flex-shrink:0;
+    height:100vh;
+    background:var(--paper-raised);
+    border-right:1px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:20px 0;
+    gap:14px;
+    overflow-y:auto;
+  }
+  .spine::-webkit-scrollbar{width:0;}
+  .spine-dot{
+    width:6px;
+    height:6px;
+    border-radius:50%;
+    background:var(--line-strong);
+    border:none;
+    padding:0;
+    cursor:pointer;
+    flex-shrink:0;
+    transition:background .15s, transform .15s;
+  }
+  .spine-dot:hover{background:var(--accent);}
+  .spine-dot.active{
+    background:var(--accent);
+    width:8px;
+    height:8px;
+  }
+
+  .note-list{
+    flex:1;
+    overflow-y:auto;
+    padding:18px 10px 20px;
+  }
+  .note-item{
+    padding:11px 12px;
+    border-radius:8px;
+    cursor:pointer;
+    margin-bottom:2px;
+    border:1px solid transparent;
+    position:relative;
+  }
+  .note-item:hover{background:var(--paper-raised);}
+  .note-item.active{
+    background:var(--accent-soft);
+    border-color:var(--accent-soft);
+  }
+  .note-item .title{
+    font-family:'Lora',serif;
+    font-weight:600;
+    font-size:14.5px;
+    color:var(--ink);
+    margin:0 0 4px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .note-item .title:empty::before{content:"Sin título";color:var(--muted);font-weight:500;}
+  .note-item .meta{
+    display:flex;
+    gap:8px;
+    align-items:baseline;
+  }
+  .note-item .time{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px;
+    color:var(--accent);
+    flex-shrink:0;
+  }
+  .note-item .excerpt{
+    font-size:12px;
+    color:var(--muted);
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  .empty-list{
+    padding:30px 16px;
+    text-align:center;
+    color:var(--muted);
+    font-size:13px;
+    line-height:1.6;
+  }
+
+  /* -------- Editor -------- */
+  .editor-pane{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    min-width:0;
+    background:var(--paper-raised);
+  }
+  .editor-topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:16px 32px 0;
+  }
+  .editor-topbar .stamp{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px;
+    color:var(--muted);
+  }
+  .icon-btn{
+    border:none;
+    background:transparent;
+    cursor:pointer;
+    padding:6px;
+    border-radius:6px;
+    color:var(--muted);
+    display:flex;
+  }
+  .icon-btn:hover{background:var(--paper);color:var(--danger);}
+  .icon-btn.add:hover{color:var(--accent);}
+
+  .editor-scroll{
+    flex:1;
+    overflow-y:auto;
+    padding:6px 32px 40px;
+  }
+  .title-input{
+    width:100%;
+    border:none;
+    outline:none;
+    background:transparent;
+    font-family:'Lora',serif;
+    font-weight:600;
+    font-size:30px;
+    color:var(--ink);
+    margin:6px 0 18px;
+    font-style:normal;
+  }
+  .title-input::placeholder{color:var(--line-strong);}
+
+  .body-input{
+    width:100%;
+    min-height:420px;
+    border:none;
+    outline:none;
+    resize:none;
+    background:transparent;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    font-size:15.5px;
+    line-height:31px;
+    color:var(--ink-soft);
+    display:block;
+  }
+  .body-input::placeholder{color:var(--line-strong);}
+
+  .word-count{
+    font-family:'JetBrains Mono',monospace;
+    font-size:10.5px;
+    color:var(--muted);
+    padding:10px 32px 14px;
+    border-top:1px solid var(--line);
+  }
+
+  .empty-editor{
+    flex:1;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    color:var(--muted);
+    gap:14px;
+    text-align:center;
+    padding:40px;
+  }
+  .empty-editor .glyph{
+    font-family:'Lora',serif;
+    font-size:38px;
+    color:var(--line-strong);
+  }
+  .empty-editor p{margin:0;font-size:14px;max-width:260px;line-height:1.6;}
+
+  ::-webkit-scrollbar{width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="spine" id="spine"></div>
+  <div class="editor-pane" id="editorPane"></div>
+</div>
+
+<script>
+(function(){
+  var notes = [];
+  var activeId = null;
+  var saveTimer = null;
+
+  var noteList = document.getElementById('noteList');
+  var editorPane = document.getElementById('editorPane');
+  var spine = document.getElementById('spine');
+
+  function uid(){
+    return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  }
+
+  function relativeTime(ts){
+    var diff = Date.now() - ts;
+    var min = Math.floor(diff / 60000);
+    if(min < 1) return "ahora";
+    if(min < 60) return min + " min";
+    var hrs = Math.floor(min / 60);
+    if(hrs < 24) return hrs + " h";
+    var days = Math.floor(hrs / 24);
+    if(days < 7) return days + " d";
+    var d = new Date(ts);
+    return d.toLocaleDateString('es', {day:'numeric', month:'short'});
+  }
+
+  function excerptOf(body){
+    var t = (body || "").replace(/\s+/g, " ").trim();
+    return t.length ? t : "Nota vacía";
+  }
+
+  async function persist(){
+    try{
+      await window.storage.set('notes-data', JSON.stringify(notes), false);
+    }catch(e){
+      console.error('No se pudo guardar', e);
+    }
+  }
+
+  async function load(){
+    try{
+      var res = await window.storage.get('notes-data', false);
+      notes = res && res.value ? JSON.parse(res.value) : [];
+    }catch(e){
+      notes = [];
+    }
+    if(notes.length === 0){
+      notes = [
+        {
+          id: uid(),
+          title: "Bienvenido a tu bloc",
+          body: "Este es un espacio minimalista para pensar por escrito.\n\nEscribe una idea, una lista o un borrador. Todo se guarda automáticamente.",
+          updatedAt: Date.now()
+        }
+      ];
+      await persist();
+    }
+    notes.sort(function(a,b){ return b.updatedAt - a.updatedAt; });
+    activeId = notes[0].id;
+    renderList();
+    renderSpine();
+    renderEditor();
+  }
+
+  function renderSpine(){
+    if(!spine) return;
+    spine.innerHTML = "";
+    notes.forEach(function(n){
+      var dot = document.createElement('button');
+      dot.className = 'spine-dot' + (n.id === activeId ? ' active' : '');
+      dot.setAttribute('aria-label', n.title || 'Nota sin título');
+      dot.title = n.title || 'Nota sin título';
+      dot.addEventListener('click', function(){
+        activeId = n.id;
+        renderSpine();
+        renderEditor();
+      });
+      spine.appendChild(dot);
+    });
+  }
+
+  function renderList(){
+    if(!noteList) return;
+    noteList.innerHTML = "";
+    var visible = notes;
+
+    if(visible.length === 0){
+      var empty = document.createElement('div');
+      empty.className = 'empty-list';
+      empty.textContent = "No hay notas todavía.";
+      noteList.appendChild(empty);
+      return;
+    }
+
+    visible.forEach(function(n){
+      var item = document.createElement('div');
+      item.className = 'note-item' + (n.id === activeId ? ' active' : '');
+      item.innerHTML =
+        '<p class="title">' + escapeHtml(n.title || "") + '</p>' +
+        '<div class="meta">' +
+          '<span class="time">' + relativeTime(n.updatedAt) + '</span>' +
+          '<span class="excerpt">' + escapeHtml(excerptOf(n.body)) + '</span>' +
+        '</div>';
+      item.addEventListener('click', function(){
+        activeId = n.id;
+        renderList();
+    renderSpine();
+        renderEditor();
+      });
+      noteList.appendChild(item);
+    });
+  }
+
+  function escapeHtml(s){
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function wordCount(text){
+    var t = (text || "").trim();
+    if(!t) return 0;
+    return t.split(/\s+/).length;
+  }
+
+  function renderEditor(){
+    var note = notes.find(function(n){ return n.id === activeId; });
+    if(!note){
+      editorPane.innerHTML =
+        '<div class="empty-editor">' +
+          '<div class="glyph">¶</div>' +
+          '<p>Elige una nota de la lista o crea una nueva para empezar a escribir.</p>' +
+          '<button class="icon-btn add" id="emptyAddBtn" aria-label="Nueva nota" style="border:1px solid var(--line);">' +
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
+          '</button>' +
+        '</div>';
+      document.getElementById('emptyAddBtn').addEventListener('click', createNote);
+      return;
+    }
+
+    editorPane.innerHTML =
+      '<div class="editor-topbar">' +
+        '<span class="stamp">Editado ' + relativeTime(note.updatedAt) + '</span>' +
+        '<div style="display:flex;gap:4px;">' +
+          '<button class="icon-btn add" id="newNoteBtn" aria-label="Nueva nota">' +
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>' +
+          '</button>' +
+          '<button class="icon-btn" id="deleteBtn" aria-label="Eliminar nota">' +
+            '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>' +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="editor-scroll">' +
+        '<div class="body-wrap">' +
+          '<textarea class="body-input" id="bodyInput" placeholder="Escribe algo...">' + escapeHtml(note.body || "") + '</textarea>' +
+        '</div>' +
+      '</div>' +
+      '<div class="word-count" id="wordCount">' + wordCount(note.body) + ' palabras</div>';
+
+    var bodyInput = document.getElementById('bodyInput');
+    var wordCountEl = document.getElementById('wordCount');
+    var deleteBtn = document.getElementById('deleteBtn');
+    var addBtn = document.getElementById('newNoteBtn');
+
+    autoGrow(bodyInput);
+
+    addBtn.addEventListener('click', createNote);
+
+    bodyInput.addEventListener('input', function(){
+      note.body = bodyInput.value;
+      note.updatedAt = Date.now();
+      wordCountEl.textContent = wordCount(note.body) + ' palabras';
+      autoGrow(bodyInput);
+      queueSave();
+      refreshListSoft();
+    });
+
+    deleteBtn.addEventListener('click', function(){
+      notes = notes.filter(function(n){ return n.id !== note.id; });
+      activeId = notes.length ? notes[0].id : null;
+      persist();
+      renderList();
+    renderSpine();
+      renderEditor();
+    });
+  }
+
+  function autoGrow(el){
+    el.style.height = 'auto';
+    el.style.height = Math.max(420, el.scrollHeight) + 'px';
+  }
+
+  function escapeAttr(s){
+    return escapeHtml(s).replace(/"/g, '&quot;');
+  }
+
+  function queueSave(){
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function(){
+      notes.sort(function(a,b){ return b.updatedAt - a.updatedAt; });
+      persist();
+    }, 500);
+  }
+
+  function refreshListSoft(){
+    // Update just the visible metadata without losing focus on inputs
+    clearTimeout(refreshListSoft._t);
+    refreshListSoft._t = setTimeout(renderList, 400);
+  }
+
+  function createNote(){
+    var note = { id: uid(), title: "", body: "", updatedAt: Date.now() };
+    notes.unshift(note);
+    activeId = note.id;
+    persist();
+    renderList();
+    renderSpine();
+    renderEditor();
+    setTimeout(function(){
+      var t = document.getElementById('titleInput');
+      if(t) t.focus();
+    }, 0);
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
