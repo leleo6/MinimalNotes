@@ -172,11 +172,23 @@ const FONT_MAP = {
   mono:   "'JetBrains Mono', monospace",
 };
 
+const THEME_BG = {
+  light: '#F6F5F0',
+  dark:  '#181816',
+  sepia: '#F1E7D0',
+};
+
 function applyConfigToDOM(config) {
   // Guardar en la etiqueta HTML el tema activo
   const theme = config.theme || 'light';
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('mn-theme', theme);
+
+  // Sincronizar el fondo de la ventana nativa para evitar bloques negros al redimensionar
+  try {
+    const { getCurrentWindow } = window.__TAURI__.window;
+    getCurrentWindow().setBackgroundColor(THEME_BG[theme] || THEME_BG.light);
+  } catch (_) {}
 
   // Ajustar estilos en caliente en el editor si está visible
   const body = document.getElementById('bodyInput');

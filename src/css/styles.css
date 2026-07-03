@@ -118,10 +118,10 @@ html[data-theme="sepia"] {
 html, body {
   height: 100%;
   overflow: hidden;
+  background: var(--paper);
 }
 
 body {
-  background: var(--paper);
   color: var(--ink);
   font-family: var(--font-ui);
   font-size: 15px;

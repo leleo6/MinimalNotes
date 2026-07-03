@@ -15,7 +15,8 @@
         "minHeight": 240,
         "resizable": true,
         "decorations": true,
-        "center": true
+        "center": true,
+        "backgroundColor": "#F6F5F0"
       }
     ],
     "security": {
