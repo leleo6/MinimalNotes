@@ -82,6 +82,25 @@ function renderAll() {
   renderSidebar(callbacks);
   renderEditor(callbacks);
   applyConfigToDOM(currentConfig);
+  attachScrollListeners();
+}
+
+// ---------- Scrollbar auto-hide ----------
+
+function attachScrollListeners() {
+  document.querySelectorAll('.editor-scroll, .spine').forEach(el => {
+    if (el._scrollHandler) return;
+
+    el._scrollHandler = () => {
+      el.classList.add('scrolling');
+      clearTimeout(el._scrollTimer);
+      el._scrollTimer = setTimeout(() => {
+        el.classList.remove('scrolling');
+      }, 800);
+    };
+
+    el.addEventListener('scroll', el._scrollHandler);
+  });
 }
 
 // ---------- Atajos de teclado globales ----------

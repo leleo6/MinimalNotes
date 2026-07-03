@@ -131,9 +131,16 @@ body {
 }
 
 /* ---------- Scrollbars ---------- */
-::-webkit-scrollbar         { width: 5px; }
-::-webkit-scrollbar-thumb   { background: var(--line-strong); border-radius: 4px; }
-::-webkit-scrollbar-track   { background: transparent; }
+::-webkit-scrollbar              { width: 5px; }
+::-webkit-scrollbar-track        { background: transparent; }
+::-webkit-scrollbar-thumb        { background: transparent; border-radius: 4px; }
+
+.editor-scroll:hover::-webkit-scrollbar-thumb,
+.spine:hover::-webkit-scrollbar-thumb,
+.editor-scroll.scrolling::-webkit-scrollbar-thumb,
+.spine.scrolling::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+}
 
 /* ---------- Layout ---------- */
 .app {
@@ -161,7 +168,6 @@ body {
   gap: 12px;
   overflow-y: auto;
 }
-.spine::-webkit-scrollbar { width: 0; }
 
 .spine-dot {
   width: 7px;
