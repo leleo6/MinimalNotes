@@ -70,6 +70,7 @@ export async function createNote() {
   if (unsaved.length >= _maxNotes) {
     const oldest = unsaved.reduce((a, b) => (a.updatedAt < b.updatedAt ? a : b));
     removeNote(oldest.id);
+    emitNoteDeleted(oldest.id).catch(() => {});
   }
 
   const note = {

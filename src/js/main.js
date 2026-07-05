@@ -117,8 +117,6 @@ function attachScrollListeners() {
 }
 
 // ---------- Atajos de teclado globales ----------
-// Principio OCP: los atajos se registran como datos en un array;
-// agregar uno nuevo no requiere modificar la lógica de dispatch.
 
 function applyHistory(historyFn) {
   const active = getActiveNote();
@@ -131,32 +129,47 @@ function applyHistory(historyFn) {
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-const SHORTCUTS = [
-  { key: 'n',                       handler: async () => { await openNewNoteWindow(); renderAll(); } },
-  { key: 'o',                       handler: async () => { await callbacks.onOpenFile(); } },
-  { key: 's',                       handler: async () => { await saveCurrentActiveNote(); } },
-  { key: 'z',                       handler: async () => { applyHistory(undo); } },
-  { key: 'y',                       handler: async () => { applyHistory(redo); } },
-  { key: ['=', '+'],                handler: () => changeZoom(10) },
-  { key: '-',                       handler: () => changeZoom(-10) },
-  { key: '0',                       handler: () => resetZoom() },
-  { key: 'h',                       handler: () => toggleSearch() },
-];
+const SHORTCUT_ACTIONS = {
+  newNote:      { handler: async () => { await openNewNoteWindow(); renderAll(); } },
+  openFile:     { handler: async () => { await callbacks.onOpenFile(); } },
+  saveNote:     { handler: async () => { await saveCurrentActiveNote(); } },
+  undo:         { handler: async () => { applyHistory(undo); } },
+  redo:         { handler: async () => { applyHistory(redo); } },
+  zoomIn:       { handler: () => changeZoom(10) },
+  zoomOut:      { handler: () => changeZoom(-10) },
+  resetZoom:    { handler: () => resetZoom() },
+  toggleSearch: { handler: () => toggleSearch() },
+};
+
+/** @type {((e: KeyboardEvent) => void) | null} */
+let _keydownHandler = null;
 
 function registerKeyboardShortcuts() {
-  document.addEventListener('keydown', async e => {
-    const ctrl = e.ctrlKey || e.metaKey;
-    if (!ctrl) return;
+  if (_keydownHandler) {
+    document.removeEventListener('keydown', _keydownHandler);
+  }
 
-    for (const sc of SHORTCUTS) {
+  _keydownHandler = async (e) => {
+    for (const [action, entry] of Object.entries(SHORTCUT_ACTIONS)) {
+      const sc = currentConfig.shortcuts?.[action];
+      if (!sc) continue;
+
+      const mods = sc.modifiers;
+      const modMatch = (mods.ctrl  === (e.ctrlKey || e.metaKey)) &&
+                       (mods.alt   === e.altKey) &&
+                       (mods.shift === e.shiftKey);
+      if (!modMatch) continue;
+
       const keys = Array.isArray(sc.key) ? sc.key : [sc.key];
       if (keys.includes(e.key)) {
         e.preventDefault();
-        await sc.handler();
+        await entry.handler();
         return;
       }
     }
-  });
+  };
+
+  document.addEventListener('keydown', _keydownHandler);
 
   document.addEventListener('wheel', (e) => {
     if (e.ctrlKey || e.metaKey) {
@@ -181,6 +194,7 @@ async function init() {
     window.__TAURI__.event.listen('settings-changed', async ({ payload }) => {
       currentConfig = { ...CONFIG_DEFAULTS, ...payload };
       applyConfigToDOM(currentConfig);
+      registerKeyboardShortcuts();
       await saveSettingsToStore(currentConfig);
     });
   } catch (_) {}
@@ -278,14 +292,15 @@ function openSettingsWindow() {
     placeholder: currentConfig.placeholder,
     maxNotes:    currentConfig.maxNotes,
     autoSave:    currentConfig.autoSave,
-    showTabbar:  currentConfig.showTabbar
+    showTabbar:  currentConfig.showTabbar,
+    shortcuts:   JSON.stringify(currentConfig.shortcuts || {}),
   }).toString();
 
   _settingsWin = new WebviewWindow('settings', {
     url: 'settings.html?' + q,
     title: 'Configuración — MinimalNotes',
     width: 440,
-    height: 480,
+    height: 600,
     resizable: false,
     center: true,
     decorations: true

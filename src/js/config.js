@@ -10,6 +10,18 @@
 
 import { setNotesLimit, setAutoSave } from './notes.js';
 
+const DEFAULT_SHORTCUTS = {
+  newNote:      { modifiers: { ctrl: true,  alt: false, shift: false }, key: 'n'       },
+  openFile:     { modifiers: { ctrl: true,  alt: false, shift: false }, key: 'o'       },
+  saveNote:     { modifiers: { ctrl: true,  alt: false, shift: false }, key: 's'       },
+  undo:         { modifiers: { ctrl: true,  alt: false, shift: false }, key: 'z'       },
+  redo:         { modifiers: { ctrl: true,  alt: false, shift: false }, key: 'y'       },
+  zoomIn:       { modifiers: { ctrl: true,  alt: false, shift: false }, key: ['=', '+'] },
+  zoomOut:      { modifiers: { ctrl: true,  alt: false, shift: false }, key: '-'       },
+  resetZoom:    { modifiers: { ctrl: true,  alt: false, shift: false }, key: '0'       },
+  toggleSearch: { modifiers: { ctrl: true,  alt: false, shift: false }, key: 'h'       },
+};
+
 export const CONFIG_DEFAULTS = {
   fontSize:    16,
   lineHeight:  1.8,
@@ -20,7 +32,18 @@ export const CONFIG_DEFAULTS = {
   maxNotes:    10,
   autoSave:    false,
   showTabbar:  false,
+  shortcuts:   { ...DEFAULT_SHORTCUTS },
 };
+
+/** Devuelve una copia de los atajos por defecto. */
+export function getDefaultShortcuts() {
+  return Object.fromEntries(
+    Object.entries(DEFAULT_SHORTCUTS).map(([k, v]) => [
+      k,
+      { modifiers: { ...v.modifiers }, key: Array.isArray(v.key) ? [...v.key] : v.key },
+    ])
+  );
+}
 
 export const FONT_MAP = {
   system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',

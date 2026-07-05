@@ -9,7 +9,7 @@
 
 const emit = window.__TAURI__.event.emit;
 
-import { CONFIG_DEFAULTS } from './config.js';
+import { CONFIG_DEFAULTS, getDefaultShortcuts } from './config.js';
 import { createStepper } from './stepper.js';
 
 /* ---------- Estado local ---------- */
@@ -19,6 +19,11 @@ let config = { ...CONFIG_DEFAULTS };
 async function loadConfig() {
   try {
     const params = new URLSearchParams(window.location.search);
+    const shortcutsRaw = params.get('shortcuts');
+    let shortcuts = null;
+    if (shortcutsRaw) {
+      try { shortcuts = JSON.parse(shortcutsRaw); } catch (_) {}
+    }
     config = {
       fontSize:    parseInt(params.get('fontSize')) || CONFIG_DEFAULTS.fontSize,
       lineHeight:  parseFloat(params.get('lineHeight')) || CONFIG_DEFAULTS.lineHeight,
@@ -29,12 +34,25 @@ async function loadConfig() {
       maxNotes:    parseInt(params.get('maxNotes')) || CONFIG_DEFAULTS.maxNotes,
       autoSave:    params.get('autoSave') === 'true',
       showTabbar:  params.get('showTabbar') === 'true',
+      shortcuts:   shortcuts || { ...getDefaultShortcuts() },
     };
   } catch (err) {
     console.warn('[settings] load params error:', err);
   }
   renderControls();
   applyLocalTheme();
+}
+
+/** Convierte un shortcut a texto legible (ej: "Ctrl+Shift+N"). */
+function formatShortcut(sc) {
+  const parts = [];
+  if (sc.modifiers.ctrl)  parts.push('Ctrl');
+  if (sc.modifiers.alt)   parts.push('Alt');
+  if (sc.modifiers.shift) parts.push('Shift');
+  const k = Array.isArray(sc.key) ? sc.key[0] : sc.key;
+  if (k === ' ') parts.push('Space');
+  else parts.push(k.toUpperCase());
+  return parts.join('+');
 }
 
 /* ---------- Reflejar estado en UI ---------- */
@@ -48,6 +66,13 @@ function renderControls() {
   document.getElementById('maxNotesVal').textContent    = config.maxNotes;
   document.getElementById('autoSaveToggle').checked     = !!config.autoSave;
   document.getElementById('showTabbarToggle').checked   = !!config.showTabbar;
+
+  // Actualizar botones de atajos
+  document.querySelectorAll('.shortcut-key').forEach(btn => {
+    const action = btn.dataset.action;
+    const sc = config.shortcuts?.[action];
+    if (sc) btn.textContent = formatShortcut(sc);
+  });
 }
 
 /* ---------- Aplicar tema a esta misma ventana ---------- */
@@ -59,13 +84,85 @@ function applyLocalTheme() {
   localStorage.setItem('mn-theme', theme);
 }
 
+/* ---------- Key-recorder ---------- */
+let _recordingAction = null;
+
+function setupShortcutRecorders() {
+  document.querySelectorAll('.shortcut-key').forEach(btn => {
+    btn.addEventListener('click', () => startRecording(btn.dataset.action));
+  });
+
+  document.addEventListener('keydown', handleRecordingKeydown);
+}
+
+function startRecording(action) {
+  if (_recordingAction) {
+    const prev = document.querySelector(`.shortcut-key[data-action="${_recordingAction}"]`);
+    if (prev) prev.classList.remove('recording');
+  }
+  _recordingAction = action;
+  const btn = document.querySelector(`.shortcut-key[data-action="${action}"]`);
+  if (btn) {
+    btn.textContent = '…';
+    btn.classList.add('recording');
+  }
+}
+
+function handleRecordingKeydown(e) {
+  if (!_recordingAction) return;
+
+  // Ignorar solo la tecla Escape para cancelar
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    cancelRecording();
+    return;
+  }
+
+  // Ignorar teclas modificadoras solas
+  if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return;
+
+  e.preventDefault();
+  e.stopImmediatePropagation();
+
+  const sc = {
+    modifiers: {
+      ctrl:  e.ctrlKey || e.metaKey,
+      alt:   e.altKey,
+      shift: e.shiftKey,
+    },
+    key: e.key,
+  };
+
+  config.shortcuts[_recordingAction] = sc;
+  triggerLiveUpdate();
+
+  const btn = document.querySelector(`.shortcut-key[data-action="${_recordingAction}"]`);
+  if (btn) {
+    btn.textContent = formatShortcut(sc);
+    btn.classList.remove('recording');
+  }
+  _recordingAction = null;
+}
+
+function cancelRecording() {
+  const btn = _recordingAction && document.querySelector(`.shortcut-key[data-action="${_recordingAction}"]`);
+  if (btn) {
+    const sc = config.shortcuts[_recordingAction];
+    btn.textContent = sc ? formatShortcut(sc) : '—';
+    btn.classList.remove('recording');
+  }
+  _recordingAction = null;
+}
+
 /* ---------- Emitir cambios en tiempo real ---------- */
 async function triggerLiveUpdate() {
   await emit('settings-changed', config);
 }
 
-/* ---------- Init (DEBE ir antes de createStepper para initial correcto) ---------- */
+/* ---------- Init ---------- */
 loadConfig();
+setupShortcutRecorders();
 
 /* ---------- Steppers (DRY: factory createStepper) ---------- */
 createStepper({
@@ -132,7 +229,7 @@ document.getElementById('btnApply').addEventListener('click', async () => {
 
 /* ---------- Botón "Restaurar" ---------- */
 document.getElementById('btnReset').addEventListener('click', async () => {
-  config = { ...CONFIG_DEFAULTS };
+  config = { ...CONFIG_DEFAULTS, shortcuts: getDefaultShortcuts() };
   renderControls();
   applyLocalTheme();
   await triggerLiveUpdate();
@@ -156,7 +253,7 @@ function showToast(msg) {
 
 /* ---------- Cerrar con tecla ESC ---------- */
 document.addEventListener('keydown', async (e) => {
-  if (e.key === 'Escape') {
+  if (e.key === 'Escape' && !_recordingAction) {
     try {
       const { getCurrentWindow } = window.__TAURI__.window;
       await getCurrentWindow().close();
