@@ -1,28 +1,15 @@
-/**
- * main.js — Punto de entrada e inicialización de la app.
- *
- * Principio SRP: su única responsabilidad es ensamblar los
- * módulos, cargar el estado inicial y registrar los atajos
- * de teclado globales.
- *
- * Principio DRY: las funciones render* son los únicos lugares
- * desde donde se actualiza la UI. Todos los callbacks los
- * invocan en lugar de duplicar la lógica de renderizado.
- */
-
 import { setNotes, setActiveId, getActiveNote } from './state.js';
-import { loadFromStore, loadSettingsFromStore, saveSettingsToStore } from './store.js';
+import { loadFromStore, loadSettingsFromStore } from './store.js';
 import { createNote, openFileFromSystem, saveActiveNoteToSystem } from './notes.js';
 import { CONFIG_DEFAULTS, applyConfigToDOM } from './config.js';
 import { renderSidebar }                              from './ui/sidebar.js';
-import { renderEditor, changeZoom, resetZoom }        from './ui/editor.js';
+import { renderEditor, changeZoom, resetZoom, zoomLevel } from './ui/editor.js';
 import { renderTabbar }                               from './ui/tabbar.js';
 import { toggleSearch }                               from './ui/search.js';
-import { registerCurrentWindow, registerSyncListeners, setupWindowStatePersistence, openNewNoteWindow, openNoteWindow } from './windows.js';
-import { undo, redo }                                 from './history.js';
-import { uid }                                        from './utils.js';
-
-// ---------- Callbacks compartidos (DRY: definidos una sola vez) ----------
+import { registerCurrentWindow, setupWindowStatePersistence, openNewNoteWindow } from './windows.js';
+import { registerSyncListeners } from './sync.js';
+import { undo, redo, lockRedoStack } from './history.js';
+import { uid, showTemporalIndicator, getQueryParams } from './utils.js';
 
 const callbacks = {
   async onNewNote() {
@@ -72,23 +59,13 @@ const callbacks = {
   },
 };
 
-// ---------- Guardado físico de archivo (DRY) ----------
-
 async function saveCurrentActiveNote() {
   const activeNote = getActiveNote();
   if (activeNote) {
     await saveActiveNoteToSystem(activeNote);
-    // Visual confirmation in the footer
-    const saveEl = document.getElementById('saveIndicator');
-    if (saveEl) {
-      saveEl.classList.add('visible');
-      clearTimeout(saveEl._hideTimer);
-      saveEl._hideTimer = setTimeout(() => saveEl.classList.remove('visible'), 1800);
-    }
+    showTemporalIndicator(document.getElementById('saveIndicator'));
   }
 }
-
-// ---------- Render principal ----------
 
 function renderAll() {
   renderSidebar(callbacks);
@@ -97,8 +74,6 @@ function renderAll() {
   applyConfigToDOM(currentConfig);
   attachScrollListeners();
 }
-
-// ---------- Scrollbar auto-hide ----------
 
 function attachScrollListeners() {
   document.querySelectorAll('.editor-scroll, .spine').forEach(el => {
@@ -116,8 +91,6 @@ function attachScrollListeners() {
   });
 }
 
-// ---------- Atajos de teclado globales ----------
-
 function applyHistory(historyFn) {
   const active = getActiveNote();
   if (!active) return;
@@ -125,6 +98,7 @@ function applyHistory(historyFn) {
   if (val === null) return;
   const input = document.getElementById('bodyInput');
   if (!input) return;
+  lockRedoStack(active.id);
   input.value = val;
   input.dispatchEvent(new Event('input', { bubbles: true }));
 }
@@ -141,12 +115,15 @@ const SHORTCUT_ACTIONS = {
   toggleSearch: { handler: () => toggleSearch() },
 };
 
-/** @type {((e: KeyboardEvent) => void) | null} */
 let _keydownHandler = null;
+let _wheelHandler = null;
 
 function registerKeyboardShortcuts() {
   if (_keydownHandler) {
     document.removeEventListener('keydown', _keydownHandler);
+  }
+  if (_wheelHandler) {
+    document.removeEventListener('wheel', _wheelHandler);
   }
 
   _keydownHandler = async (e) => {
@@ -171,38 +148,33 @@ function registerKeyboardShortcuts() {
 
   document.addEventListener('keydown', _keydownHandler);
 
-  document.addEventListener('wheel', (e) => {
+  _wheelHandler = (e) => {
     if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
       changeZoom(e.deltaY < 0 ? 5 : -5);
     }
-  }, { passive: false });
+  };
+  document.addEventListener('wheel', _wheelHandler);
 }
 
-// ---------- Inicialización ----------
-
 async function init() {
-  // Cargar configuración de la app
   const loadedConfig = await loadSettingsFromStore();
   if (loadedConfig) {
     currentConfig = { ...CONFIG_DEFAULTS, ...loadedConfig };
   }
   applyConfigToDOM(currentConfig);
 
-  // Escuchar eventos globales de configuración
   try {
     window.__TAURI__.event.listen('settings-changed', async ({ payload }) => {
       currentConfig = { ...CONFIG_DEFAULTS, ...payload };
       applyConfigToDOM(currentConfig);
       registerKeyboardShortcuts();
-      await saveSettingsToStore(currentConfig);
     });
   } catch (_) {}
 
-  // Cargar notas: desde URL param (nueva ventana) o desde store
+  const params = getQueryParams();
   let saved = null;
   try {
-    const notesParam = new URLSearchParams(window.location.search).get('notes');
+    const notesParam = params.get('notes');
     if (notesParam) {
       saved = JSON.parse(decodeURIComponent(notesParam));
     }
@@ -212,39 +184,28 @@ async function init() {
   }
   if (!saved || !Array.isArray(saved) || saved.length === 0) {
     saved = [{
-      id:        uid(),
-      body:      '',
+      id: uid(),
+      body: '',
       updatedAt: Date.now(),
-      filePath:  null,
+      filePath: null,
     }];
   }
 
   saved.sort((a, b) => b.updatedAt - a.updatedAt);
   setNotes(saved);
 
-  // Determinar qué nota mostrar: desde URL param o la más reciente
-  let initialNoteId = null;
-  try {
-    const params = new URLSearchParams(window.location.search);
-    initialNoteId = params.get('noteId');
-  } catch (_) {}
+  let initialNoteId = params.get('noteId');
   if (!initialNoteId || !saved.find(n => n.id === initialNoteId)) {
     initialNoteId = saved[0].id;
   }
   setActiveId(initialNoteId);
 
-  // Registrar esta ventana en el gestor de ventanas
-  let windowLabel = 'main';
-  try {
-    const params = new URLSearchParams(window.location.search);
-    windowLabel = params.get('window') || getCurrentWindowLabel();
-  } catch (_) {}
-  registerCurrentWindow(initialNoteId, 100);
+  let windowLabel = params.get('window') || getCurrentWindowLabel();
 
-  // Registrar persistencia de estado de ventana
+  registerCurrentWindow(initialNoteId, zoomLevel);
+
   setupWindowStatePersistence(windowLabel, initialNoteId);
 
-  // Registrar listeners de sincronización multi-ventana
   registerSyncListeners(() => {
     renderAll();
   });
@@ -264,16 +225,13 @@ function getCurrentWindowLabel() {
 
 let currentConfig = { ...CONFIG_DEFAULTS };
 
-// ---------- Inicialización ----------
-
 init();
 
-// ---------- Ventana secundaria independiente ----------
 let _settingsWin = null;
 
 function openSettingsWindow() {
   const { WebviewWindow } = window.__TAURI__.webviewWindow;
-  
+
   if (_settingsWin) {
     _settingsWin.setFocus().catch(() => {
       _settingsWin = null;
@@ -282,7 +240,6 @@ function openSettingsWindow() {
     return;
   }
 
-  // Codificar los parámetros de configuración actuales en la URL de la ventana
   const q = new URLSearchParams({
     fontSize:    currentConfig.fontSize,
     lineHeight:  currentConfig.lineHeight,

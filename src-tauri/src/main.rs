@@ -10,12 +10,24 @@
 mod commands;
 mod file_manager;
 
+use tauri::Manager;
+
 fn main() {
     tauri::Builder::default()
         // Plugin de almacenamiento key-value resiliente a crashes
         .plugin(tauri_plugin_store::Builder::default().build())
         // Plugin de diálogos nativos del SO
         .plugin(tauri_plugin_dialog::init())
+        // Al cerrar la ventana principal, cerrar también la de configuración si está abierta
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if window.label() == "main" {
+                    if let Some(settings_win) = window.get_webview_window("settings") {
+                        let _ = settings_win.close();
+                    }
+                }
+            }
+        })
         // Registro de comandos IPC expuestos al frontend
         .invoke_handler(tauri::generate_handler![
             commands::open_file,

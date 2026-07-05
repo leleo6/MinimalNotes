@@ -1,51 +1,35 @@
-/**
- * notes.js — CRUD de notas.
- *
- * Principio SRP: solo gestiona la lógica de negocio de las
- * notas (crear, eliminar, actualizar). No sabe nada de DOM
- * ni de cómo se persisten los datos.
- *
- * Principio DRY: createNote genera la estructura canónica de
- * una nota; nunca se construye en otro lugar.
- */
-
 import { uid, debounce } from './utils.js';
 import {
   addNote, removeNote, updateNote,
-  setActiveId, sortByUpdated, getNotes, getActiveNote
+  setActiveId, sortByUpdated, getNotes, getRawNotes, getActiveNote
 } from './state.js';
 import { saveToStore } from './store.js';
 import { isRemoteUpdate, emitNoteUpdated, emitNoteDeleted, emitNoteCreated } from './windows.js';
 
-/** Límite de notas sin guardar en caché (configurable desde settings). */
 let _maxNotes = 10;
-
 let _autoSave = false;
 
-/**
- * Actualiza el límite de notas en caché.
- * Se llama desde main.js cada vez que cambia la configuración.
- * @param {number} n
- */
 export function setNotesLimit(n) {
   _maxNotes = Math.max(2, n);
 }
 
-/**
- * Activa o desactiva el guardado automático de archivos físicos.
- * @param {boolean} enabled
- */
 export function setAutoSave(enabled) {
   _autoSave = !!enabled;
 }
 
-/** Debounce de guardado: 500 ms después del último cambio. */
+export function createNoteShape(body = '', filePath = null) {
+  return {
+    id: uid(),
+    body,
+    updatedAt: Date.now(),
+    filePath,
+  };
+}
+
 const debouncedSave = debounce(async () => {
   sortByUpdated();
-  const notes = getNotes();
-  await saveToStore(notes);
+  await saveToStore(getRawNotes());
 
-  // Si el guardado automático de archivos físicos está activo y la nota tiene archivo físico, guardar
   if (_autoSave) {
     const activeNote = getActiveNote();
     if (activeNote && activeNote.filePath) {
@@ -59,13 +43,7 @@ const debouncedSave = debounce(async () => {
   }
 }, 500);
 
-/**
- * Crea una nota nueva vacía y la activa.
- * @returns {{ id: string, body: string, updatedAt: number, filePath: string | null }}
- */
 export async function createNote() {
-  // Hacer cumplir el límite de notas en caché:
-  // Si las notas sin filePath ya alcanzan el máximo, eliminar la más antigua.
   const unsaved = getNotes().filter(n => !n.filePath);
   if (unsaved.length >= _maxNotes) {
     const oldest = unsaved.reduce((a, b) => (a.updatedAt < b.updatedAt ? a : b));
@@ -73,36 +51,23 @@ export async function createNote() {
     emitNoteDeleted(oldest.id).catch(() => {});
   }
 
-  const note = {
-    id:        uid(),
-    body:      '',
-    updatedAt: Date.now(),
-    filePath:  null,
-  };
+  const note = createNoteShape();
   addNote(note);
   setActiveId(note.id);
-  await saveToStore(getNotes()); // guardado inmediato al crear
+  // snapshot is handled by renderActiveEditor — no need to push here
+  await saveToStore(getRawNotes());
   emitNoteCreated(note).catch(() => {});
   return note;
 }
 
-/**
- * Elimina una nota por ID y ajusta el activeId al siguiente disponible.
- * @param {string} id
- */
 export async function deleteNote(id) {
   removeNote(id);
   const remaining = getNotes();
   setActiveId(remaining.length ? remaining[0].id : null);
-  await saveToStore(remaining);
+  await saveToStore(getRawNotes());
   emitNoteDeleted(id).catch(() => {});
 }
 
-/**
- * Actualiza el cuerpo de la nota activa y encola el guardado.
- * @param {string} id
- * @param {string} body
- */
 export function updateNoteBody(id, body) {
   updateNote(id, { body, updatedAt: Date.now() });
   debouncedSave();
@@ -111,33 +76,21 @@ export function updateNoteBody(id, body) {
   }
 }
 
-/**
- * Abre un archivo a través del diálogo de Tauri y lo agrega al listado.
- * Si el archivo ya estaba abierto, solo lo activa.
- * @returns {Promise<object|null>}
- */
 export async function openFileFromSystem() {
   const { invoke } = window.__TAURI__.core;
   try {
     const [filePath, content] = await invoke('open_file');
 
-    // Comprobar si ya existe una nota con esa misma ruta física
     const existing = getNotes().find(n => n.filePath === filePath);
     if (existing) {
       setActiveId(existing.id);
       return existing;
     }
 
-    // Crear nota cargando el archivo físico
-    const note = {
-      id:        uid(),
-      body:      content,
-      updatedAt: Date.now(),
-      filePath:  filePath,
-    };
+    const note = createNoteShape(content, filePath);
     addNote(note);
     setActiveId(note.id);
-    await saveToStore(getNotes());
+    await saveToStore(getRawNotes());
     return note;
   } catch (err) {
     if (err !== 'Operación cancelada') {
@@ -147,24 +100,16 @@ export async function openFileFromSystem() {
   }
 }
 
-/**
- * Guarda la nota activa físicamente en el disco.
- * Si no está vinculada a ningún archivo, abre el diálogo "Guardar como".
- * @param {object} note
- * @returns {Promise<void>}
- */
 export async function saveActiveNoteToSystem(note) {
   if (!note) return;
   const { invoke } = window.__TAURI__.core;
   try {
     if (note.filePath) {
-      // Escribir directamente en el archivo
       await invoke('save_file', { path: note.filePath, content: note.body });
     } else {
-      // Abrir diálogo de guardado
       const filePath = await invoke('save_file_as', { content: note.body });
       updateNote(note.id, { filePath, updatedAt: Date.now() });
-      await saveToStore(getNotes());
+      await saveToStore(getRawNotes());
     }
   } catch (err) {
     if (err !== 'Operación cancelada') {

@@ -1,5 +1,4 @@
 const WINDOW_PREFIX = 'mn-note-';
-
 const openWindows = new Map();
 const positionSaveTimers = new Map();
 
@@ -9,8 +8,38 @@ export function setRemoteUpdate(val) {
   isRemoteUpdate = val;
 }
 
+export function getOpenWindows() {
+  return openWindows;
+}
+
 export function getWindowLabel(noteId) {
   return WINDOW_PREFIX + noteId;
+}
+
+function safeEmit(event, payload) {
+  try {
+    window.__TAURI__.event.emit(event, payload);
+  } catch (_) {}
+}
+
+export async function emitNoteUpdated(noteId, body) {
+  safeEmit('note-updated', { noteId, body, updatedAt: Date.now() });
+}
+
+export async function emitNoteDeleted(noteId) {
+  safeEmit('note-deleted', { noteId });
+}
+
+export async function emitNoteCreated(note) {
+  safeEmit('note-created', { note });
+}
+
+export function emitWindowNoteOpened(label, noteId) {
+  safeEmit('window-note-opened', { label, noteId });
+}
+
+export function emitWindowNoteClosed(label, noteId) {
+  safeEmit('window-note-closed', { label, noteId });
 }
 
 export function registerCurrentWindow(noteId, zoom = 100) {
@@ -72,101 +101,6 @@ export async function openNewNoteWindow() {
   if (note) await openNoteWindow(note.id);
 }
 
-// ─── Event emitters ──────────────────────────────────────────────────────────
-
-export async function emitNoteUpdated(noteId, body) {
-  try {
-    const { emit } = window.__TAURI__.event;
-    await emit('note-updated', { noteId, body, updatedAt: Date.now() });
-  } catch (_) {}
-}
-
-export async function emitNoteDeleted(noteId) {
-  try {
-    const { emit } = window.__TAURI__.event;
-    await emit('note-deleted', { noteId });
-  } catch (_) {}
-}
-
-export async function emitNoteCreated(note) {
-  try {
-    const { emit } = window.__TAURI__.event;
-    await emit('note-created', { note });
-  } catch (_) {}
-}
-
-function emitWindowNoteOpened(label, noteId) {
-  try {
-    window.__TAURI__.event.emit('window-note-opened', { label, noteId });
-  } catch (_) {}
-}
-
-function emitWindowNoteClosed(label, noteId) {
-  try {
-    window.__TAURI__.event.emit('window-note-closed', { label, noteId });
-  } catch (_) {}
-}
-
-// ─── Sync listeners ──────────────────────────────────────────────────────────
-
-export function registerSyncListeners(onSyncUpdate) {
-  try {
-    const { listen } = window.__TAURI__.event;
-
-    listen('note-updated', ({ payload }) => {
-      isRemoteUpdate = true;
-      import('./state.js').then(({ updateNote, getActiveNote }) => {
-        updateNote(payload.noteId, { body: payload.body, updatedAt: payload.updatedAt });
-        const active = getActiveNote();
-        if (active && active.id === payload.noteId) {
-          const input = document.getElementById('bodyInput');
-          if (input && input.value !== payload.body) {
-            const selStart = input.selectionStart;
-            const selEnd = input.selectionEnd;
-            input.value = payload.body;
-            input.setSelectionRange(selStart, selEnd);
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-          }
-        }
-        isRemoteUpdate = false;
-      });
-    });
-
-    listen('note-deleted', ({ payload }) => {
-      import('./state.js').then(({ removeNote, getNotes, setActiveId, getActiveId }) => {
-        if (getNotes().some(n => n.id === payload.noteId)) {
-          removeNote(payload.noteId);
-          const remaining = getNotes();
-          if (getActiveId() === payload.noteId) {
-            setActiveId(remaining.length ? remaining[0].id : null);
-          }
-          if (onSyncUpdate) onSyncUpdate();
-        }
-      });
-    });
-
-    listen('note-created', ({ payload }) => {
-      import('./state.js').then(({ addNote, getNotes }) => {
-        if (!getNotes().some(n => n.id === payload.note.id)) {
-          addNote(payload.note);
-          if (onSyncUpdate) onSyncUpdate();
-        }
-      });
-    });
-
-    // Sync openWindows across all windows
-    listen('window-note-opened', ({ payload }) => {
-      openWindows.set(payload.label, { noteId: payload.noteId, zoom: 100 });
-    });
-
-    listen('window-note-closed', ({ payload }) => {
-      openWindows.delete(payload.label);
-    });
-  } catch (_) {}
-}
-
-// ─── Window state persistence ────────────────────────────────────────────────
-
 export async function saveWindowState(label, noteId, zoom = 100) {
   try {
     const { getCurrentWindow } = window.__TAURI__.window;
@@ -196,6 +130,12 @@ export function setupWindowStatePersistence(label, noteId) {
     window.addEventListener('beforeunload', () => {
       openWindows.delete(label);
       emitWindowNoteClosed(label, noteId);
+      try {
+        const key = 'mn-closed-window';
+        const closed = JSON.parse(localStorage.getItem(key) || '[]');
+        closed.push({ label, noteId, timestamp: Date.now() });
+        localStorage.setItem(key, JSON.stringify(closed));
+      } catch (_) {}
     });
 
     const savePos = () => {

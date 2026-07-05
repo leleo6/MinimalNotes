@@ -54,14 +54,16 @@ export function renderSearchPanel() {
       return;
     }
     const text = bodyInput.value;
+    const lowerText = text.toLowerCase();
+    const lowerTerm = searchTerm.toLowerCase();
     matches = [];
-    let idx = text.toLowerCase().indexOf(searchTerm.toLowerCase());
+    let idx = lowerText.indexOf(lowerTerm);
     while (idx !== -1) {
       matches.push(idx);
-      idx = text.toLowerCase().indexOf(searchTerm.toLowerCase(), idx + 1);
+      idx = lowerText.indexOf(lowerTerm, idx + 1);
     }
     currentMatchIndex = matches.length > 0 ? 0 : -1;
-    countEl.textContent = matches.length > 0 ? `${currentMatchIndex + 1} de ${matches.length}` : '0 resultados';
+    countEl.textContent = matches.length > 0 ? `1 de ${matches.length}` : '0 resultados';
     highlightMatch(bodyInput);
   }
 
@@ -70,7 +72,6 @@ export function renderSearchPanel() {
       const pos = matches[currentMatchIndex];
       input.focus();
       input.setSelectionRange(pos, pos + searchTerm.length);
-      input.scrollTop = input.scrollTop;
     }
   }
 
@@ -99,6 +100,11 @@ export function renderSearchPanel() {
     bodyInput.value = before + replaceTerm + after;
     bodyInput.dispatchEvent(new Event('input', { bubbles: true }));
     performSearch();
+    if (matches.length > 0) {
+      currentMatchIndex = currentMatchIndex % matches.length;
+    }
+    countEl.textContent = matches.length > 0 ? `${currentMatchIndex + 1} de ${matches.length}` : '0 resultados';
+    highlightMatch(document.getElementById('bodyInput'));
   }
 
   function doReplaceAll() {
@@ -106,7 +112,8 @@ export function renderSearchPanel() {
     const bodyInput = document.getElementById('bodyInput');
     if (!bodyInput) return;
     replaceTerm = replaceInput.value;
-    const regex = new RegExp(searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'gi');
     bodyInput.value = bodyInput.value.replace(regex, replaceTerm);
     bodyInput.dispatchEvent(new Event('input', { bubbles: true }));
     performSearch();

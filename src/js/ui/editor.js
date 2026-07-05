@@ -1,13 +1,5 @@
-/**
- * editor.js — Renderizado y eventos del panel de edición.
- *
- * Principio SRP: única responsabilidad = mostrar el editor
- * y manejar la escritura del usuario. No gestiona persistencia
- * ni el estado global directamente.
- */
-
 import { getActiveNote } from '../state.js';
-import { wordCount } from '../utils.js';
+import { wordCount, showTemporalIndicator } from '../utils.js';
 import { updateNoteBody, deleteNote } from '../notes.js';
 import { pushSnapshot } from '../history.js';
 import { isSearchOpen, renderSearchPanel } from './search.js';
@@ -31,7 +23,11 @@ export function resetZoom() {
 function applyZoom() {
   const wrap = document.querySelector('.editor-body-wrap');
   if (wrap) {
-    wrap.style.zoom = zoomLevel + '%';
+    if (zoomLevel === 100) {
+      wrap.style.removeProperty('zoom');
+    } else {
+      wrap.style.zoom = zoomLevel + '%';
+    }
   }
   const indicator = document.getElementById('zoomIndicator');
   if (indicator) {
@@ -39,21 +35,6 @@ function applyZoom() {
   }
 }
 
-/**
- * @typedef {Object} EditorCallbacks
- * @property {() => void} onNewNote
- * @property {() => void} onDeleteNote
- * @property {() => void} onInput
- * @property {() => void} onOpenFile
- * @property {() => void} onSaveNote
- * @property {() => void} onOpenSettings — abre la ventana de configuración
- * @property {() => void} onToggleSearch
- */
-
-/**
- * Renderiza el estado del editor según la nota activa.
- * @param {EditorCallbacks} callbacks
- */
 export function renderEditor(callbacks) {
   const pane = document.getElementById('editorPane');
   if (!pane) return;
@@ -67,8 +48,6 @@ export function renderEditor(callbacks) {
 
   renderActiveEditor(pane, note, callbacks);
 }
-
-// ---------- Privados ----------
 
 function renderEmptyEditor(pane, callbacks) {
   pane.innerHTML = `
@@ -97,14 +76,12 @@ function renderEmptyEditor(pane, callbacks) {
 
 function renderActiveEditor(pane, note, callbacks) {
   pane.innerHTML = `
-    <!-- FAB: botón flotante de acciones -->
     <div class="action-menu-container" id="actionMenuContainer">
       <button class="menu-trigger-btn" id="menuTrigger" aria-label="Acciones" title="Ver acciones">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
       </button>
-
       <div class="action-menu-dropdown" id="actionDropdown">
         <button class="icon-btn icon-btn--add" id="btnNew" aria-label="Nueva nota" title="Nueva nota (Ctrl+N)">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
@@ -134,7 +111,6 @@ function renderActiveEditor(pane, note, callbacks) {
         </button>
       </div>
     </div>
-
     <div class="editor-scroll">
       <div class="editor-body-wrap">
         <textarea
@@ -148,9 +124,7 @@ function renderActiveEditor(pane, note, callbacks) {
         ></textarea>
       </div>
     </div>
-
     <div id="searchPanel" class="search-panel"></div>
-
     <footer class="editor-footer">
       <button class="settings-fab" id="btnSettings" aria-label="Configuración" title="Configuración">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -164,73 +138,27 @@ function renderActiveEditor(pane, note, callbacks) {
     </footer>
   `;
 
-  // Establecer el valor directamente (evitar escapeHtml en textarea — es seguro)
   const bodyInput     = document.getElementById('bodyInput');
   const wordCountEl   = document.getElementById('wordCountEl');
-  const saveIndicator = document.getElementById('saveIndicator');
 
   bodyInput.value = note.body ?? '';
   autoGrow(bodyInput);
 
-  // Enfocar al final del texto
+  pushSnapshot(note.id, note.body);
+
   requestAnimationFrame(() => {
     bodyInput.focus();
     bodyInput.setSelectionRange(bodyInput.value.length, bodyInput.value.length);
   });
 
-  // Evento de escritura
-  bodyInput.addEventListener('input', () => {
-    updateNoteBody(note.id, bodyInput.value);
-    wordCountEl.textContent = `${wordCount(bodyInput.value)} palabras`;
-    autoGrow(bodyInput);
-    showSaveIndicator(saveIndicator);
-    callbacks.onInput();
-  });
+  attachInputHandlers(bodyInput, wordCountEl, note, callbacks);
 
-  // Push snapshot on input for undo (debounced)
-  let snapTimer;
-  bodyInput.addEventListener('input', () => {
-    clearTimeout(snapTimer);
-    snapTimer = setTimeout(() => {
-      if (!note) return;
-      pushSnapshot(note.id, bodyInput.value);
-    }, 300);
-  });
-
-  // Undo/Redo via Ctrl+Z / Ctrl+Y handled in main.js (global)
-  // But we need to expose a way for main.js to trigger undo/redo on the active note
-
-  // Apply zoom on render
   applyZoom();
 
-  // Restore search panel state
-  if (isSearchOpen) {
-    const sp = document.getElementById('searchPanel');
-    if (sp) {
-      sp.classList.add('visible');
-      renderSearchPanel();
-    }
-  }
+  restoreSearchPanel();
 
-  // Control del menú colapsable
-  const menuTrigger = document.getElementById('menuTrigger');
-  const actionDropdown = document.getElementById('actionDropdown');
-  menuTrigger.addEventListener('click', (e) => {
-    e.stopPropagation();
-    menuTrigger.classList.toggle('active');
-    actionDropdown.classList.toggle('show');
-  });
+  attachMenuHandlers();
 
-  // Cerrar menú al hacer clic fuera (evitando duplicación de listeners)
-  if (!window._menuClickRegistered) {
-    document.addEventListener('click', () => {
-      document.querySelectorAll('.menu-trigger-btn').forEach(el => el.classList.remove('active'));
-      document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
-    });
-    window._menuClickRegistered = true;
-  }
-
-  // Botones
   document.getElementById('btnNew').addEventListener('click', callbacks.onNewNote);
   document.getElementById('btnOpen').addEventListener('click', callbacks.onOpenFile);
   document.getElementById('btnSave').addEventListener('click', callbacks.onSaveNote);
@@ -259,21 +187,57 @@ function renderActiveEditor(pane, note, callbacks) {
   });
 }
 
-/**
- * Auto-expande el textarea según su contenido.
- * @param {HTMLTextAreaElement} el
- */
+function attachInputHandlers(bodyInput, wordCountEl, note, callbacks) {
+  bodyInput.addEventListener('input', () => {
+    updateNoteBody(note.id, bodyInput.value);
+    wordCountEl.textContent = `${wordCount(bodyInput.value)} palabras`;
+    autoGrow(bodyInput);
+    showTemporalIndicator(document.getElementById('saveIndicator'));
+    callbacks.onInput();
+  });
+
+  let snapTimer;
+  bodyInput.addEventListener('input', () => {
+    clearTimeout(snapTimer);
+    snapTimer = setTimeout(() => {
+      pushSnapshot(note.id, bodyInput.value);
+    }, 300);
+  });
+}
+
+function restoreSearchPanel() {
+  if (isSearchOpen) {
+    const sp = document.getElementById('searchPanel');
+    if (sp) {
+      sp.classList.add('visible');
+      renderSearchPanel();
+    }
+  }
+}
+
+let _menuClickRegistered = false;
+
+function attachMenuHandlers() {
+  const menuTrigger = document.getElementById('menuTrigger');
+  const actionDropdown = document.getElementById('actionDropdown');
+  if (!menuTrigger || !actionDropdown) return;
+
+  menuTrigger.addEventListener('click', (e) => {
+    e.stopPropagation();
+    menuTrigger.classList.toggle('active');
+    actionDropdown.classList.toggle('show');
+  });
+
+  if (!_menuClickRegistered) {
+    document.addEventListener('click', () => {
+      document.querySelectorAll('.menu-trigger-btn').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.action-menu-dropdown').forEach(el => el.classList.remove('show'));
+    });
+    _menuClickRegistered = true;
+  }
+}
+
 function autoGrow(el) {
   el.style.height = 'auto';
   el.style.height = Math.max(el.scrollHeight, 300) + 'px';
-}
-
-/**
- * Muestra el indicador "guardado" brevemente.
- * @param {HTMLElement} el
- */
-function showSaveIndicator(el) {
-  el.classList.add('visible');
-  clearTimeout(el._hideTimer);
-  el._hideTimer = setTimeout(() => el.classList.remove('visible'), 1800);
 }
