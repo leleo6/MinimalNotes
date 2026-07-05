@@ -12,18 +12,22 @@
 
 import { setNotes, setActiveId, getActiveNote } from './state.js';
 import { loadFromStore, loadSettingsFromStore, saveSettingsToStore } from './store.js';
-import { createNote, openFileFromSystem, saveActiveNoteToSystem, setNotesLimit, setAutoSave } from './notes.js';
-import { renderSidebar }                                  from './ui/sidebar.js';
-import { renderEditor }                                   from './ui/editor.js';
-import { uid }                                            from './utils.js';
+import { createNote, openFileFromSystem, saveActiveNoteToSystem } from './notes.js';
+import { CONFIG_DEFAULTS, applyConfigToDOM } from './config.js';
+import { renderSidebar }                              from './ui/sidebar.js';
+import { renderEditor, changeZoom, resetZoom }        from './ui/editor.js';
+import { renderTabbar }                               from './ui/tabbar.js';
+import { toggleSearch }                               from './ui/search.js';
+import { registerCurrentWindow, registerSyncListeners, setupWindowStatePersistence, openNewNoteWindow, openNoteWindow } from './windows.js';
+import { undo, redo }                                 from './history.js';
+import { uid }                                        from './utils.js';
 
 // ---------- Callbacks compartidos (DRY: definidos una sola vez) ----------
 
 const callbacks = {
-  onNewNote() {
-    createNote();
+  async onNewNote() {
+    await createNote();
     renderAll();
-    // Enfocar el textarea en el siguiente tick
     requestAnimationFrame(() => {
       document.getElementById('bodyInput')?.focus();
     });
@@ -45,18 +49,26 @@ const callbacks = {
   },
 
   onSelectNote() {
-    // Solo re-renderizar editor y spine dots (la lista ya tiene el estado correcto)
     renderEditor(callbacks);
     renderSidebar(callbacks);
+    renderTabbar(callbacks);
   },
 
   onDeleteNote() {
     renderAll();
   },
 
-  onInput() {
-    // Refrescar solo la lista y los dots (sin re-montar el editor)
-    renderSidebar(callbacks);
+  onInput: (() => {
+    let _inputTimer;
+    return () => {
+      renderSidebar(callbacks);
+      clearTimeout(_inputTimer);
+      _inputTimer = setTimeout(() => renderTabbar(callbacks), 400);
+    };
+  })(),
+
+  onToggleSearch() {
+    toggleSearch();
   },
 };
 
@@ -80,6 +92,7 @@ async function saveCurrentActiveNote() {
 
 function renderAll() {
   renderSidebar(callbacks);
+  renderTabbar(callbacks);
   renderEditor(callbacks);
   applyConfigToDOM(currentConfig);
   attachScrollListeners();
@@ -104,24 +117,53 @@ function attachScrollListeners() {
 }
 
 // ---------- Atajos de teclado globales ----------
+// Principio OCP: los atajos se registran como datos en un array;
+// agregar uno nuevo no requiere modificar la lógica de dispatch.
+
+function applyHistory(historyFn) {
+  const active = getActiveNote();
+  if (!active) return;
+  const val = historyFn(active.id);
+  if (val === null) return;
+  const input = document.getElementById('bodyInput');
+  if (!input) return;
+  input.value = val;
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+const SHORTCUTS = [
+  { key: 'n',                       handler: async () => { await openNewNoteWindow(); renderAll(); } },
+  { key: 'o',                       handler: async () => { await callbacks.onOpenFile(); } },
+  { key: 's',                       handler: async () => { await saveCurrentActiveNote(); } },
+  { key: 'z',                       handler: async () => { applyHistory(undo); } },
+  { key: 'y',                       handler: async () => { applyHistory(redo); } },
+  { key: ['=', '+'],                handler: () => changeZoom(10) },
+  { key: '-',                       handler: () => changeZoom(-10) },
+  { key: '0',                       handler: () => resetZoom() },
+  { key: 'h',                       handler: () => toggleSearch() },
+];
 
 function registerKeyboardShortcuts() {
   document.addEventListener('keydown', async e => {
     const ctrl = e.ctrlKey || e.metaKey;
+    if (!ctrl) return;
 
-    if (ctrl && e.key === 'n') {
-      e.preventDefault();
-      callbacks.onNewNote();
-    }
-    if (ctrl && e.key === 'o') {
-      e.preventDefault();
-      await callbacks.onOpenFile();
-    }
-    if (ctrl && e.key === 's') {
-      e.preventDefault();
-      await saveCurrentActiveNote();
+    for (const sc of SHORTCUTS) {
+      const keys = Array.isArray(sc.key) ? sc.key : [sc.key];
+      if (keys.includes(e.key)) {
+        e.preventDefault();
+        await sc.handler();
+        return;
+      }
     }
   });
+
+  document.addEventListener('wheel', (e) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      changeZoom(e.deltaY < 0 ? 5 : -5);
+    }
+  }, { passive: false });
 }
 
 // ---------- Inicialización ----------
@@ -135,17 +177,26 @@ async function init() {
   applyConfigToDOM(currentConfig);
 
   // Escuchar eventos globales de configuración
-  window.__TAURI__.event.listen('settings-changed', async ({ payload }) => {
-    currentConfig = { ...CONFIG_DEFAULTS, ...payload };
-    applyConfigToDOM(currentConfig);
-    await saveSettingsToStore(currentConfig);
-  });
+  try {
+    window.__TAURI__.event.listen('settings-changed', async ({ payload }) => {
+      currentConfig = { ...CONFIG_DEFAULTS, ...payload };
+      applyConfigToDOM(currentConfig);
+      await saveSettingsToStore(currentConfig);
+    });
+  } catch (_) {}
 
-  // Cargar notas persistidas
-  let saved = await loadFromStore();
-
+  // Cargar notas: desde URL param (nueva ventana) o desde store
+  let saved = null;
+  try {
+    const notesParam = new URLSearchParams(window.location.search).get('notes');
+    if (notesParam) {
+      saved = JSON.parse(decodeURIComponent(notesParam));
+    }
+  } catch (_) {}
+  if (!saved || !Array.isArray(saved)) {
+    saved = await loadFromStore();
+  }
   if (!saved || !Array.isArray(saved) || saved.length === 0) {
-    // Nota inicial vacía por defecto
     saved = [{
       id:        uid(),
       body:      '',
@@ -154,84 +205,54 @@ async function init() {
     }];
   }
 
-  // Ordenar por más reciente y activar la primera
   saved.sort((a, b) => b.updatedAt - a.updatedAt);
   setNotes(saved);
-  setActiveId(saved[0].id);
+
+  // Determinar qué nota mostrar: desde URL param o la más reciente
+  let initialNoteId = null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    initialNoteId = params.get('noteId');
+  } catch (_) {}
+  if (!initialNoteId || !saved.find(n => n.id === initialNoteId)) {
+    initialNoteId = saved[0].id;
+  }
+  setActiveId(initialNoteId);
+
+  // Registrar esta ventana en el gestor de ventanas
+  let windowLabel = 'main';
+  try {
+    const params = new URLSearchParams(window.location.search);
+    windowLabel = params.get('window') || getCurrentWindowLabel();
+  } catch (_) {}
+  registerCurrentWindow(initialNoteId, 100);
+
+  // Registrar persistencia de estado de ventana
+  setupWindowStatePersistence(windowLabel, initialNoteId);
+
+  // Registrar listeners de sincronización multi-ventana
+  registerSyncListeners(() => {
+    renderAll();
+  });
 
   registerKeyboardShortcuts();
   renderAll();
 }
 
-// ---------- Configuración por defecto ----------
-// IMPORTANTE: declarado ANTES de init() para evitar Temporal Dead Zone
-// (let/const no tienen hoisting de valor — usará undefined si se llama
-// init() antes de la declaración).
-const CONFIG_DEFAULTS = {
-  fontSize:    16,
-  lineHeight:  1.8,
-  fontFamily:  'system',
-  theme:       'light',
-  editorWidth: 'none',
-  placeholder: 'Escribe algo…',
-  maxNotes:    10,
-  autoSave:    false,
-};
+function getCurrentWindowLabel() {
+  try {
+    const { getCurrentWindow } = window.__TAURI__.window;
+    return getCurrentWindow().label;
+  } catch (_) {
+    return 'main';
+  }
+}
 
 let currentConfig = { ...CONFIG_DEFAULTS };
 
 // ---------- Inicialización ----------
 
 init();
-
-// ---------- Aplicar configuraciones en caliente ----------
-const FONT_MAP = {
-  system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
-  serif:  "'Lora', Georgia, serif",
-  mono:   "'JetBrains Mono', monospace",
-};
-
-const THEME_BG = {
-  light: '#F6F5F0',
-  dark:  '#181816',
-  sepia: '#F1E7D0',
-};
-
-function applyConfigToDOM(config) {
-  // Guardar en la etiqueta HTML el tema activo
-  const theme = config.theme || 'light';
-  document.documentElement.setAttribute('data-theme', theme);
-  localStorage.setItem('mn-theme', theme);
-
-  // Sincronizar el fondo de la ventana nativa para evitar bloques negros al redimensionar
-  try {
-    const { getCurrentWindow } = window.__TAURI__.window;
-    getCurrentWindow().setBackgroundColor(THEME_BG[theme] || THEME_BG.light);
-  } catch (_) {}
-
-  // Ajustar estilos en caliente en el editor si está visible
-  const body = document.getElementById('bodyInput');
-  const wrap = document.querySelector('.editor-body-wrap');
-
-  if (body) {
-    body.style.fontSize   = config.fontSize + 'px';
-    body.style.lineHeight = String(config.lineHeight);
-    if (config.fontFamily && FONT_MAP[config.fontFamily]) {
-      body.style.fontFamily = FONT_MAP[config.fontFamily];
-    }
-    body.placeholder = config.placeholder || 'Escribe algo…';
-  }
-
-  if (wrap) {
-    wrap.style.maxWidth = config.editorWidth === 'none' ? '' : config.editorWidth;
-  }
-
-  // Sincronizar el límite de notas en caché con el módulo de notas
-  setNotesLimit(config.maxNotes || 10);
-
-  // Sincronizar el guardado automático de archivos físicos
-  setAutoSave(!!config.autoSave);
-}
 
 // ---------- Ventana secundaria independiente ----------
 let _settingsWin = null;
@@ -256,7 +277,8 @@ function openSettingsWindow() {
     editorWidth: currentConfig.editorWidth,
     placeholder: currentConfig.placeholder,
     maxNotes:    currentConfig.maxNotes,
-    autoSave:    currentConfig.autoSave
+    autoSave:    currentConfig.autoSave,
+    showTabbar:  currentConfig.showTabbar
   }).toString();
 
   _settingsWin = new WebviewWindow('settings', {

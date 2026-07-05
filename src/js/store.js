@@ -9,9 +9,10 @@
  * simultáneamente notas y configuración.
  */
 
-const STORE_FILE    = 'notes.json';
-const NOTES_KEY     = 'notes-data';
-const SETTINGS_KEY  = 'settings-data';
+const STORE_FILE      = 'notes.json';
+const NOTES_KEY       = 'notes-data';
+const SETTINGS_KEY    = 'settings-data';
+const WINDOWS_KEY     = 'windows-data';
 
 /** @type {import('@tauri-apps/plugin-store').Store | null} */
 let _store = null;
@@ -27,6 +28,36 @@ async function getStore() {
   return _store;
 }
 
+/**
+ * Helper interno — persiste un valor en el store.
+ * DRY: usado por saveToStore, saveSettingsToStore y saveWindowStates.
+ */
+async function setStoreValue(key, data) {
+  try {
+    const store = await getStore();
+    await store.set(key, JSON.stringify(data));
+    await store.save();
+  } catch (err) {
+    console.error(`[store] error al guardar "${key}":`, err);
+  }
+}
+
+/**
+ * Helper interno — carga un valor del store.
+ * DRY: usado por loadFromStore, loadSettingsFromStore y loadWindowStates.
+ */
+async function getStoreValue(key) {
+  try {
+    const store = await getStore();
+    const raw   = await store.get(key);
+    if (!raw) return null;
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch (err) {
+    console.error(`[store] error al cargar "${key}":`, err);
+    return null;
+  }
+}
+
 // ─── Notas ───────────────────────────────────────────────────────────────────
 
 /**
@@ -34,15 +65,7 @@ async function getStore() {
  * @returns {Promise<object[] | null>}
  */
 export async function loadFromStore() {
-  try {
-    const store = await getStore();
-    const raw   = await store.get(NOTES_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error('[store] load error:', err);
-    return null;
-  }
+  return getStoreValue(NOTES_KEY);
 }
 
 /**
@@ -51,13 +74,7 @@ export async function loadFromStore() {
  * @returns {Promise<void>}
  */
 export async function saveToStore(notes) {
-  try {
-    const store = await getStore();
-    await store.set(NOTES_KEY, JSON.stringify(notes));
-    await store.save();
-  } catch (err) {
-    console.error('[store] save error:', err);
-  }
+  return setStoreValue(NOTES_KEY, notes);
 }
 
 // ─── Configuración ───────────────────────────────────────────────────────────
@@ -67,15 +84,8 @@ export async function saveToStore(notes) {
  * @returns {Promise<object | null>}
  */
 export async function loadSettingsFromStore() {
-  try {
-    const store = await getStore();
-    const raw   = await store.get(SETTINGS_KEY);
-    if (!raw) return null;
-    return typeof raw === 'string' ? JSON.parse(raw) : raw;
-  } catch (err) {
-    console.error('[store] settings load error:', err);
-    return null;
-  }
+  const raw = await getStoreValue(SETTINGS_KEY);
+  return raw;
 }
 
 /**
@@ -84,11 +94,15 @@ export async function loadSettingsFromStore() {
  * @returns {Promise<void>}
  */
 export async function saveSettingsToStore(settings) {
-  try {
-    const store = await getStore();
-    await store.set(SETTINGS_KEY, JSON.stringify(settings));
-    await store.save();
-  } catch (err) {
-    console.error('[store] settings save error:', err);
-  }
+  return setStoreValue(SETTINGS_KEY, settings);
+}
+
+// ─── Window States ───────────────────────────────────────────────────────────
+
+export async function saveWindowStates(states) {
+  return setStoreValue(WINDOWS_KEY, states);
+}
+
+export async function loadWindowStates() {
+  return getStoreValue(WINDOWS_KEY);
 }

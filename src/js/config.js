@@ -1,0 +1,74 @@
+/**
+ * config.js — Configuración centralizada de la aplicación.
+ *
+ * Principio SRP: única responsabilidad = definir y aplicar la
+ * configuración global (temas, tipografía, editor).
+ *
+ * Principio DRY: define los valores por defecto UNA SOLA VEZ;
+ * main.js y settings.js los importan desde aquí.
+ */
+
+import { setNotesLimit, setAutoSave } from './notes.js';
+
+export const CONFIG_DEFAULTS = {
+  fontSize:    16,
+  lineHeight:  1.8,
+  fontFamily:  'system',
+  theme:       'light',
+  editorWidth: 'none',
+  placeholder: 'Escribe algo…',
+  maxNotes:    10,
+  autoSave:    false,
+  showTabbar:  false,
+};
+
+export const FONT_MAP = {
+  system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+  serif:  "'Lora', Georgia, serif",
+  mono:   "'JetBrains Mono', monospace",
+};
+
+export const THEME_BG = {
+  light: '#F6F5F0',
+  dark:  '#181816',
+  sepia: '#F1E7D0',
+};
+
+/**
+ * Aplica la configuración al DOM en caliente.
+ * @param {object} config
+ */
+export function applyConfigToDOM(config) {
+  const theme = config.theme || 'light';
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('mn-theme', theme);
+
+  try {
+    const { getCurrentWindow } = window.__TAURI__.window;
+    getCurrentWindow().setBackgroundColor(THEME_BG[theme] || THEME_BG.light);
+  } catch (_) {}
+
+  const body = document.getElementById('bodyInput');
+  const wrap = document.querySelector('.editor-body-wrap');
+
+  if (body) {
+    body.style.fontSize   = config.fontSize + 'px';
+    body.style.lineHeight = String(config.lineHeight);
+    if (config.fontFamily && FONT_MAP[config.fontFamily]) {
+      body.style.fontFamily = FONT_MAP[config.fontFamily];
+    }
+    body.placeholder = config.placeholder || 'Escribe algo…';
+  }
+
+  if (wrap) {
+    wrap.style.maxWidth = config.editorWidth === 'none' ? '' : config.editorWidth;
+  }
+
+  setNotesLimit(config.maxNotes || 10);
+  setAutoSave(!!config.autoSave);
+
+  const tabbarEl = document.getElementById('tabbar');
+  if (tabbarEl) {
+    tabbarEl.classList.toggle('hidden', !config.showTabbar);
+  }
+}

@@ -9,34 +9,26 @@
 
 const emit = window.__TAURI__.event.emit;
 
-/* ---------- Valores por defecto (deben coincidir con CONFIG_DEFAULTS en main.js) ---------- */
-const DEFAULTS = {
-  fontSize:    16,
-  lineHeight:  1.8,
-  fontFamily:  'system',
-  theme:       'light',
-  editorWidth: 'none',
-  placeholder: 'Escribe algo…',
-  maxNotes:    10,
-  autoSave:    false,
-};
+import { CONFIG_DEFAULTS } from './config.js';
+import { createStepper } from './stepper.js';
 
 /* ---------- Estado local ---------- */
-let config = { ...DEFAULTS };
+let config = { ...CONFIG_DEFAULTS };
 
 /* ---------- Cargar config desde URL ---------- */
 async function loadConfig() {
   try {
     const params = new URLSearchParams(window.location.search);
     config = {
-      fontSize:    parseInt(params.get('fontSize')) || DEFAULTS.fontSize,
-      lineHeight:  parseFloat(params.get('lineHeight')) || DEFAULTS.lineHeight,
-      fontFamily:  params.get('fontFamily') || DEFAULTS.fontFamily,
-      theme:       params.get('theme') || DEFAULTS.theme,
-      editorWidth: params.get('editorWidth') || DEFAULTS.editorWidth,
-      placeholder: params.get('placeholder') || DEFAULTS.placeholder,
-      maxNotes:    parseInt(params.get('maxNotes')) || DEFAULTS.maxNotes,
+      fontSize:    parseInt(params.get('fontSize')) || CONFIG_DEFAULTS.fontSize,
+      lineHeight:  parseFloat(params.get('lineHeight')) || CONFIG_DEFAULTS.lineHeight,
+      fontFamily:  params.get('fontFamily') || CONFIG_DEFAULTS.fontFamily,
+      theme:       params.get('theme') || CONFIG_DEFAULTS.theme,
+      editorWidth: params.get('editorWidth') || CONFIG_DEFAULTS.editorWidth,
+      placeholder: params.get('placeholder') || CONFIG_DEFAULTS.placeholder,
+      maxNotes:    parseInt(params.get('maxNotes')) || CONFIG_DEFAULTS.maxNotes,
       autoSave:    params.get('autoSave') === 'true',
+      showTabbar:  params.get('showTabbar') === 'true',
     };
   } catch (err) {
     console.warn('[settings] load params error:', err);
@@ -55,6 +47,7 @@ function renderControls() {
   document.getElementById('placeholderInput').value     = config.placeholder;
   document.getElementById('maxNotesVal').textContent    = config.maxNotes;
   document.getElementById('autoSaveToggle').checked     = !!config.autoSave;
+  document.getElementById('showTabbarToggle').checked   = !!config.showTabbar;
 }
 
 /* ---------- Aplicar tema a esta misma ventana ---------- */
@@ -71,40 +64,25 @@ async function triggerLiveUpdate() {
   await emit('settings-changed', config);
 }
 
-/* ---------- Steppers: Tamaño de letra ---------- */
-document.getElementById('fontSizeDec').addEventListener('click', async () => {
-  config.fontSize = Math.max(10, config.fontSize - 1);
-  document.getElementById('fontSizeVal').textContent = config.fontSize;
-  await triggerLiveUpdate();
-});
-document.getElementById('fontSizeInc').addEventListener('click', async () => {
-  config.fontSize = Math.min(32, config.fontSize + 1);
-  document.getElementById('fontSizeVal').textContent = config.fontSize;
-  await triggerLiveUpdate();
-});
+/* ---------- Init (DEBE ir antes de createStepper para initial correcto) ---------- */
+loadConfig();
 
-/* ---------- Steppers: Altura de línea ---------- */
-document.getElementById('lineHeightDec').addEventListener('click', async () => {
-  config.lineHeight = Math.max(1.0, parseFloat((config.lineHeight - 0.1).toFixed(1)));
-  document.getElementById('lineHeightVal').textContent = config.lineHeight.toFixed(1);
-  await triggerLiveUpdate();
+/* ---------- Steppers (DRY: factory createStepper) ---------- */
+createStepper({
+  decId: 'fontSizeDec', incId: 'fontSizeInc', valId: 'fontSizeVal',
+  initial: config.fontSize, min: 10, max: 32,
+  onChange: (v) => { config.fontSize = v; triggerLiveUpdate(); },
 });
-document.getElementById('lineHeightInc').addEventListener('click', async () => {
-  config.lineHeight = Math.min(3.0, parseFloat((config.lineHeight + 0.1).toFixed(1)));
-  document.getElementById('lineHeightVal').textContent = config.lineHeight.toFixed(1);
-  await triggerLiveUpdate();
+createStepper({
+  decId: 'lineHeightDec', incId: 'lineHeightInc', valId: 'lineHeightVal',
+  initial: config.lineHeight, min: 1.0, max: 3.0, step: 0.1,
+  parser: parseFloat, format: (v) => v.toFixed(1),
+  onChange: (v) => { config.lineHeight = v; triggerLiveUpdate(); },
 });
-
-/* ---------- Steppers: Límite de notas ---------- */
-document.getElementById('maxNotesDec').addEventListener('click', async () => {
-  config.maxNotes = Math.max(2, config.maxNotes - 1);
-  document.getElementById('maxNotesVal').textContent = config.maxNotes;
-  await triggerLiveUpdate();
-});
-document.getElementById('maxNotesInc').addEventListener('click', async () => {
-  config.maxNotes = Math.min(50, config.maxNotes + 1);
-  document.getElementById('maxNotesVal').textContent = config.maxNotes;
-  await triggerLiveUpdate();
+createStepper({
+  decId: 'maxNotesDec', incId: 'maxNotesInc', valId: 'maxNotesVal',
+  initial: config.maxNotes, min: 2, max: 50,
+  onChange: (v) => { config.maxNotes = v; triggerLiveUpdate(); },
 });
 
 /* ---------- Selects ---------- */
@@ -134,6 +112,12 @@ document.getElementById('autoSaveToggle').addEventListener('change', async () =>
   await triggerLiveUpdate();
 });
 
+/* ---------- Input: Show Tabbar Checkbox ---------- */
+document.getElementById('showTabbarToggle').addEventListener('change', async () => {
+  config.showTabbar = document.getElementById('showTabbarToggle').checked;
+  await triggerLiveUpdate();
+});
+
 /* ---------- Botón "Listo" — cierra la ventana correctamente ---------- */
 document.getElementById('btnApply').addEventListener('click', async () => {
   try {
@@ -148,7 +132,7 @@ document.getElementById('btnApply').addEventListener('click', async () => {
 
 /* ---------- Botón "Restaurar" ---------- */
 document.getElementById('btnReset').addEventListener('click', async () => {
-  config = { ...DEFAULTS };
+  config = { ...CONFIG_DEFAULTS };
   renderControls();
   applyLocalTheme();
   await triggerLiveUpdate();
@@ -169,9 +153,6 @@ function showToast(msg) {
   clearTimeout(toast._t);
   toast._t = setTimeout(() => toast.classList.remove('show'), 2000);
 }
-
-/* ---------- Init ---------- */
-loadConfig();
 
 /* ---------- Cerrar con tecla ESC ---------- */
 document.addEventListener('keydown', async (e) => {

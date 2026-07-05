@@ -8,7 +8,36 @@
 
 import { getActiveNote } from '../state.js';
 import { wordCount } from '../utils.js';
-import { updateNoteBody, createNote, deleteNote } from '../notes.js';
+import { updateNoteBody, deleteNote } from '../notes.js';
+import { pushSnapshot } from '../history.js';
+import { isSearchOpen, renderSearchPanel } from './search.js';
+
+export let zoomLevel = 100;
+
+export function setZoomLevel(val) {
+  zoomLevel = Math.max(80, Math.min(200, val));
+}
+
+export function changeZoom(delta) {
+  setZoomLevel(zoomLevel + delta);
+  applyZoom();
+}
+
+export function resetZoom() {
+  zoomLevel = 100;
+  applyZoom();
+}
+
+function applyZoom() {
+  const wrap = document.querySelector('.editor-body-wrap');
+  if (wrap) {
+    wrap.style.zoom = zoomLevel + '%';
+  }
+  const indicator = document.getElementById('zoomIndicator');
+  if (indicator) {
+    indicator.textContent = zoomLevel + '%';
+  }
+}
 
 /**
  * @typedef {Object} EditorCallbacks
@@ -18,6 +47,7 @@ import { updateNoteBody, createNote, deleteNote } from '../notes.js';
  * @property {() => void} onOpenFile
  * @property {() => void} onSaveNote
  * @property {() => void} onOpenSettings — abre la ventana de configuración
+ * @property {() => void} onToggleSearch
  */
 
 /**
@@ -119,6 +149,8 @@ function renderActiveEditor(pane, note, callbacks) {
       </div>
     </div>
 
+    <div id="searchPanel" class="search-panel"></div>
+
     <footer class="editor-footer">
       <button class="settings-fab" id="btnSettings" aria-label="Configuración" title="Configuración">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -127,6 +159,7 @@ function renderActiveEditor(pane, note, callbacks) {
         </svg>
       </button>
       <span class="word-count" id="wordCountEl">${wordCount(note.body)} palabras</span>
+      <span class="zoom-indicator" id="zoomIndicator">${zoomLevel}%</span>
       <span class="save-indicator" id="saveIndicator">✓ guardado</span>
     </footer>
   `;
@@ -153,6 +186,31 @@ function renderActiveEditor(pane, note, callbacks) {
     showSaveIndicator(saveIndicator);
     callbacks.onInput();
   });
+
+  // Push snapshot on input for undo (debounced)
+  let snapTimer;
+  bodyInput.addEventListener('input', () => {
+    clearTimeout(snapTimer);
+    snapTimer = setTimeout(() => {
+      if (!note) return;
+      pushSnapshot(note.id, bodyInput.value);
+    }, 300);
+  });
+
+  // Undo/Redo via Ctrl+Z / Ctrl+Y handled in main.js (global)
+  // But we need to expose a way for main.js to trigger undo/redo on the active note
+
+  // Apply zoom on render
+  applyZoom();
+
+  // Restore search panel state
+  if (isSearchOpen) {
+    const sp = document.getElementById('searchPanel');
+    if (sp) {
+      sp.classList.add('visible');
+      renderSearchPanel();
+    }
+  }
 
   // Control del menú colapsable
   const menuTrigger = document.getElementById('menuTrigger');
@@ -191,9 +249,12 @@ function renderActiveEditor(pane, note, callbacks) {
         callbacks.onDeleteNote();
       }
     } catch (err) {
-      console.warn('Error al mostrar diálogo de confirmación, eliminando por fallback:', err);
-      await deleteNote(note.id);
-      callbacks.onDeleteNote();
+      console.warn('[editor] diálogo de confirmación no disponible:', err);
+      const fallback = window.confirm('¿Estás seguro de que deseas eliminar esta nota? Esta acción es definitiva.');
+      if (fallback) {
+        await deleteNote(note.id);
+        callbacks.onDeleteNote();
+      }
     }
   });
 }

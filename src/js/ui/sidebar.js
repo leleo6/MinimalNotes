@@ -7,7 +7,8 @@
  */
 
 import { getNotes, getActiveId, setActiveId } from '../state.js';
-import { relativeTime, excerpt } from '../utils.js';
+import { excerpt } from '../utils.js';
+import { setupDragToOpen } from '../drag.js';
 
 /**
  * @typedef {Object} SidebarCallbacks
@@ -35,7 +36,6 @@ export function renderSpine(callbacks) {
   const notes    = getNotes();
   const activeId = getActiveId();
 
-  // Ocultar la barra lateral cuando solo hay una nota: no hay nada que navegar
   spine.style.display = notes.length <= 1 ? 'none' : '';
 
   notes.forEach(note => {
@@ -43,10 +43,17 @@ export function renderSpine(callbacks) {
     dot.className   = 'spine-dot' + (note.id === activeId ? ' active' : '');
     dot.setAttribute('aria-label', note.body.slice(0, 40) || 'Nota vacía');
     dot.title       = note.body.slice(0, 60) || 'Nota vacía';
+
     dot.addEventListener('click', () => {
       setActiveId(note.id);
       callbacks.onSelectNote();
     });
+
+    setupDragToOpen(dot, note.id, (e) => {
+      const rect = spine.getBoundingClientRect();
+      return e.clientX < 0 || e.clientY < 0 || e.clientX > rect.right + 10;
+    });
+
     spine.appendChild(dot);
   });
 }

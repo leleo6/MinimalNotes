@@ -15,6 +15,7 @@ import {
   setActiveId, sortByUpdated, getNotes, getActiveNote
 } from './state.js';
 import { saveToStore } from './store.js';
+import { isRemoteUpdate, emitNoteUpdated, emitNoteDeleted, emitNoteCreated } from './windows.js';
 
 /** Límite de notas sin guardar en caché (configurable desde settings). */
 let _maxNotes = 10;
@@ -62,7 +63,7 @@ const debouncedSave = debounce(async () => {
  * Crea una nota nueva vacía y la activa.
  * @returns {{ id: string, body: string, updatedAt: number, filePath: string | null }}
  */
-export function createNote() {
+export async function createNote() {
   // Hacer cumplir el límite de notas en caché:
   // Si las notas sin filePath ya alcanzan el máximo, eliminar la más antigua.
   const unsaved = getNotes().filter(n => !n.filePath);
@@ -79,7 +80,8 @@ export function createNote() {
   };
   addNote(note);
   setActiveId(note.id);
-  saveToStore(getNotes()); // guardado inmediato al crear
+  await saveToStore(getNotes()); // guardado inmediato al crear
+  emitNoteCreated(note).catch(() => {});
   return note;
 }
 
@@ -92,6 +94,7 @@ export async function deleteNote(id) {
   const remaining = getNotes();
   setActiveId(remaining.length ? remaining[0].id : null);
   await saveToStore(remaining);
+  emitNoteDeleted(id).catch(() => {});
 }
 
 /**
@@ -102,6 +105,9 @@ export async function deleteNote(id) {
 export function updateNoteBody(id, body) {
   updateNote(id, { body, updatedAt: Date.now() });
   debouncedSave();
+  if (!isRemoteUpdate) {
+    emitNoteUpdated(id, body).catch(() => {});
+  }
 }
 
 /**
