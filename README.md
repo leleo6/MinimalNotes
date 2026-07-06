@@ -120,32 +120,72 @@ The resulting packages are placed in `src-tauri/target/release/bundle/`.
 
 ---
 
-## Download
+## Cómo instalar
 
-Pre-built binaries are available on the [Releases page](https://github.com/Leo-Codex/NOTES/releases).
+### 🪟 Windows
 
-| File | Platform | Install |
-|---|---|---|
-| `MinimalNotes-*.tar.gz` | **Any Linux** | `tar -xzf` and run `./minimalnotes` |
-| `MinimalNotes-*.pkg.tar.zst` | **Arch Linux** | `sudo pacman -U file.pkg.tar.zst` |
-| `MinimalNotes-*.msi` | **Windows** | Double-click |
-| `MinimalNotes-*-setup.exe` | **Windows** | Double-click |
+1. Ve a la [página de Releases](https://github.com/Leo-Codex/NOTES/releases)
+2. Busca la última versión (la más reciente)
+3. Descarga **`MinimalNotes-*-setup.exe`**
+4. Haz doble clic en el archivo descargado
+5. Sigue los pasos del instalador
+6. ¡Listo! Busca "MinimalNotes" en el menú de inicio
 
-> **Requirements**: Linux `.tar.gz` needs `webkit2gtk-4.1` installed system-wide.
+### 🐧 Linux (cualquier distribución)
+
+1. Ve a la [página de Releases](https://github.com/Leo-Codex/NOTES/releases)
+2. Busca la última versión
+3. Descarga **`MinimalNotes-*-x86_64-linux.tar.gz`**
+4. Abre una terminal y escribe:
+
+```bash
+# Extraer el archivo
+tar -xzf MinimalNotes-*-x86_64-linux.tar.gz
+
+# Ejecutar
+./minimalnotes
+```
+
+> **Requisito**: Necesitas tener instalado `webkit2gtk-4.1`. Si no lo tienes:
+> - Ubuntu/Debian: `sudo apt install libwebkit2gtk-4.1-dev`
+> - Fedora: `sudo dnf install webkit2gtk4.1`
+> - Arch: `sudo pacman -S webkit2gtk-4.1`
+
+### 🐧 Arch Linux (recomendado)
+
+1. Ve a la [página de Releases](https://github.com/Leo-Codex/NOTES/releases)
+2. Descarga **`MinimalNotes-*-x86_64.pkg.tar.zst`**
+3. Abre una terminal y escribe:
+
+```bash
+sudo pacman -U MinimalNotes-*-x86_64.pkg.tar.zst
+```
+
+4. `pacman` instala las dependencias automáticamente
+5. Busca "MinimalNotes" en el menú de aplicaciones
 
 ---
 
-## Continuous Builds
+## Para desarrolladores
 
-Every tagged release (`git tag v0.2.0 && git push origin v0.2.0`) triggers an automated build via **GitHub Actions** with three parallel jobs:
+### Compilar desde código
 
-| Job | Runner | Produces |
-|---|---|---|
-| `linux` | ubuntu-latest | `.tar.gz` |
-| `windows` | windows-latest | `.msi` + `.exe` |
-| `archlinux` | Arch Linux container | `.pkg.tar.zst` + `.tar.gz` |
+```bash
+npm install
+npm run build
+```
 
-All artifacts are uploaded to the corresponding [GitHub Release](https://github.com/Leo-Codex/NOTES/releases). The workflow file is at `.github/workflows/release.yml`.
+Los archivos compilados quedan en `src-tauri/target/release/bundle/`.
+
+### CI/CD automático
+
+Cada vez que se crea un tag `v*` (ej. `git tag v0.1.0 && git push origin v0.1.0`), GitHub Actions compila la app en 3 máquinas en paralelo y sube los instalables a la Release:
+
+| Máquina | Genera |
+|---|---|
+| Ubuntu | `.tar.gz` + AppImage |
+| Windows | `.msi` + `.exe` |
+| Arch Linux (contenedor) | `.pkg.tar.zst` + `.tar.gz` |
 
 ---
 
