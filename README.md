@@ -4,7 +4,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-v2-%23FFC131)](https://v2.tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-2021-edition-dea584)](https://www.rust-lang.org)
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey)](https://v2.tauri.app)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-lightgrey)](https://github.com/Leo-Codex/NOTES/releases)
 
 **MinimalNotes** is an ultra-lightweight, offline-first plain-text editor for the desktop. It prioritizes speed, simplicity, and resource efficiency, achieving an executable size of approximately **5 MB** and a memory footprint of roughly **50 MB RAM** -- comparable to the most basic system utilities.
 
@@ -122,47 +122,48 @@ The resulting packages are placed in `src-tauri/target/release/bundle/`.
 
 ## Cómo instalar
 
-### 🪟 Windows
+> ⚠️ Aún no hay versiones publicadas. La primera aparecerá cuando el mantenedor ejecute `git tag v0.1.0 && git push origin v0.1.0`.
 
-1. Ve a la [página de Releases](https://github.com/Leo-Codex/NOTES/releases)
-2. Busca la última versión (la más reciente)
-3. Descarga **`MinimalNotes-*-setup.exe`**
-4. Haz doble clic en el archivo descargado
-5. Sigue los pasos del instalador
-6. ¡Listo! Busca "MinimalNotes" en el menú de inicio
+[![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/Leo-Codex/NOTES/releases/latest)
+[![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/Leo-Codex/NOTES/releases/latest)
+[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/Leo-Codex/NOTES/releases/latest)
+[![All versions](https://img.shields.io/badge/-All_Versions-lightgrey?style=for-the-badge)](https://github.com/Leo-Codex/NOTES/releases)
 
-### 🐧 Linux (cualquier distribución)
+### Release files
 
-1. Ve a la [página de Releases](https://github.com/Leo-Codex/NOTES/releases)
-2. Busca la última versión
-3. Descarga **`MinimalNotes-*-x86_64-linux.tar.gz`**
-4. Abre una terminal y escribe:
+| Archivo | Plataforma | Instalación |
+|---|---|---|
+| `MinimalNotes_*_x64-setup.exe` | **Windows** | Doble clic → siguiente → listo |
+| `MinimalNotes_*_x64.msi` | **Windows** | Doble clic → instalar |
+| `minimalnotes_*_amd64.tar.gz` | **Cualquier Linux** | Ver instrucciones abajo |
+| `minimalnotes-*-x86_64.pkg.tar.zst` | **Arch Linux** | `sudo pacman -U archivo` |
+
+### Windows
+
+Descarga el `.exe`, haz doble clic y sigue el instalador. Busca "MinimalNotes" en el menú de inicio.
+
+### Cualquier Linux
 
 ```bash
-# Extraer el archivo
-tar -xzf MinimalNotes-*-x86_64-linux.tar.gz
-
-# Ejecutar
+# 1. Descarga el .tar.gz desde Releases
+# 2. Extraer:
+tar -xzf minimalnotes_*_amd64.tar.gz
+# 3. Ejecutar:
 ./minimalnotes
 ```
 
-> **Requisito**: Necesitas tener instalado `webkit2gtk-4.1`. Si no lo tienes:
+> Requiere `webkit2gtk-4.1`:
 > - Ubuntu/Debian: `sudo apt install libwebkit2gtk-4.1-dev`
 > - Fedora: `sudo dnf install webkit2gtk4.1`
 > - Arch: `sudo pacman -S webkit2gtk-4.1`
 
-### 🐧 Arch Linux (recomendado)
-
-1. Ve a la [página de Releases](https://github.com/Leo-Codex/NOTES/releases)
-2. Descarga **`MinimalNotes-*-x86_64.pkg.tar.zst`**
-3. Abre una terminal y escribe:
+### Arch Linux (recomendado)
 
 ```bash
-sudo pacman -U MinimalNotes-*-x86_64.pkg.tar.zst
+sudo pacman -U minimalnotes-*-x86_64.pkg.tar.zst
 ```
 
-4. `pacman` instala las dependencias automáticamente
-5. Busca "MinimalNotes" en el menú de aplicaciones
+`pacman` instala las dependencias automáticamente. Busca "MinimalNotes" en el menú.
 
 ---
 
