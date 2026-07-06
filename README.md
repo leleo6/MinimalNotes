@@ -123,17 +123,20 @@ The resulting packages are placed in `src-tauri/target/release/bundle/`.
 ## Cómo instalar
 
 
-[![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/Leo-Codex/NOTES/releases/latest/download/MinimalNotes-windows.exe)
-[![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/Leo-Codex/NOTES/releases/latest/download/minimalnotes-linux.tar.gz)
-[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/Leo-Codex/NOTES/releases/latest/download/minimalnotes-arch.pkg.tar.zst)
+[![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/Leo-Codex/NOTES/releases/latest)
+[![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/Leo-Codex/NOTES/releases/latest)
+[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/Leo-Codex/NOTES/releases/latest)
 [![All versions](https://img.shields.io/badge/-All_Versions-lightgrey?style=for-the-badge)](https://github.com/Leo-Codex/NOTES/releases)
 
 ### Release files
 
+Los instalables se generan automáticamente al crear una release. En la [página de Releases](https://github.com/Leo-Codex/NOTES/releases) encontrarás:
+
 | Archivo | Plataforma | Instalación |
 |---|---|---|
-| `MinimalNotes-windows.exe` | **Windows** | Doble clic → siguiente → listo |
-| `MinimalNotes-windows.msi` | **Windows** | Doble clic → instalar |
+| `*_x64-setup.exe` | **Windows** | Doble clic → siguiente → listo |
+| `*_x64.msi` | **Windows** | Doble clic → instalar |
+| `*.AppImage` | **Cualquier Linux** | `chmod +x` y ejecutar |
 | `minimalnotes-linux.tar.gz` | **Cualquier Linux** | Ver instrucciones abajo |
 | `minimalnotes-arch.pkg.tar.zst` | **Arch Linux** | `sudo pacman -U archivo` |
 

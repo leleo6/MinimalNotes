@@ -7,12 +7,20 @@ permissions:
   contents: write
 
 jobs:
-  linux:
-    runs-on: ubuntu-latest
+  build:
+    permissions:
+      contents: write
+    runs-on: ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-22.04, windows-latest]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Install system dependencies (Linux)
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -29,63 +37,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       - uses: actions-rust-lang/setup-rust-toolchain@v1
 
       - run: npm ci
 
-      - run: npm run tauri build -- --bundles appimage
-
-      - name: Create .tar.gz
-        run: |
-          cd src-tauri/target/release
-          tar -czf "minimalnotes-linux.tar.gz" minimalnotes
-
-      - name: Rename AppImage
-        run: |
-          mv src-tauri/target/release/bundle/appimage/*.AppImage \
-             src-tauri/target/release/bundle/appimage/MinimalNotes-linux.AppImage
-
-      - uses: actions/upload-artifact@v4
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          name: linux-bundle
-          path: |
-            src-tauri/target/release/minimalnotes-linux.tar.gz
-            src-tauri/target/release/bundle/appimage/MinimalNotes-linux.AppImage
-
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
-
-      - run: npm ci
-
-      - run: npm run tauri build -- --bundles msi,nsis
-
-      - name: Rename Windows installers
-        shell: bash
-        run: |
-          mv src-tauri/target/release/bundle/msi/*.msi \
-             src-tauri/target/release/bundle/msi/MinimalNotes-windows.msi
-          mv src-tauri/target/release/bundle/nsis/*.exe \
-             src-tauri/target/release/bundle/nsis/MinimalNotes-windows.exe
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-bundle
-          path: |
-            src-tauri/target/release/bundle/msi/MinimalNotes-windows.msi
-            src-tauri/target/release/bundle/nsis/MinimalNotes-windows.exe
+          tagName: ${{ github.ref_name }}
+          releaseName: 'v__VERSION__'
+          releaseBody: 'Release generada automáticamente por GitHub Actions.'
 
   archlinux:
+    needs: [build]
     runs-on: ubuntu-latest
     container:
       image: archlinux:latest
@@ -114,37 +80,30 @@ jobs:
 
       - run: npm run tauri build -- --no-bundle
 
-      - name: Create .tar.gz
+      - name: Create .tar.gz and .pkg.tar.zst
         run: |
           cd src-tauri/target/release
           tar -czf "minimalnotes-linux.tar.gz" minimalnotes
 
-      - name: Create .pkg.tar.zst
-        run: |
-          pkgver="${GITHUB_REF_NAME#v}"
-          pkgrel=1
-          pkgname=minimalnotes
-
           mkdir -p pkg/usr/bin pkg/usr/share/applications pkg/usr/share/pixmaps
-
-          install -Dm755 "src-tauri/target/release/${pkgname}" \
-            "pkg/usr/bin/${pkgname}"
-
-          install -Dm644 "src-tauri/icons/icon.png" \
-            "pkg/usr/share/pixmaps/${pkgname}.png"
-
-          echo '[Desktop Entry]' > "pkg/usr/share/applications/${pkgname}.desktop"
-          echo 'Type=Application' >> "pkg/usr/share/applications/${pkgname}.desktop"
-          echo "Name=MinimalNotes" >> "pkg/usr/share/applications/${pkgname}.desktop"
-          echo "Comment=Editor de texto plano ultra-ligero" >> "pkg/usr/share/applications/${pkgname}.desktop"
-          echo "Exec=${pkgname}" >> "pkg/usr/share/applications/${pkgname}.desktop"
-          echo "Icon=${pkgname}" >> "pkg/usr/share/applications/${pkgname}.desktop"
-          echo 'Categories=Utility;TextEditor;' >> "pkg/usr/share/applications/${pkgname}.desktop"
-          echo 'Terminal=false' >> "pkg/usr/share/applications/${pkgname}.desktop"
+          install -Dm755 minimalnotes pkg/usr/bin/minimalnotes
+          install -Dm644 ../../../icons/icon.png pkg/usr/share/pixmaps/minimalnotes.png
 
           {
-            echo "pkgname = ${pkgname}"
-            echo "pkgver = ${pkgver}-${pkgrel}"
+            echo '[Desktop Entry]'
+            echo 'Type=Application'
+            echo 'Name=MinimalNotes'
+            echo 'Comment=Editor de texto plano ultra-ligero'
+            echo 'Exec=minimalnotes'
+            echo 'Icon=minimalnotes'
+            echo 'Categories=Utility;TextEditor;'
+            echo 'Terminal=false'
+          } > pkg/usr/share/applications/minimalnotes.desktop
+
+          pkgver="${GITHUB_REF_NAME#v}"
+          {
+            echo "pkgname = minimalnotes"
+            echo "pkgver = ${pkgver}-1"
             echo "pkgdesc = Editor de texto plano ultra-ligero"
             echo "url = https://github.com/Leo-Codex/NOTES"
             echo "builddate = $(date +%s)"
@@ -161,30 +120,13 @@ jobs:
             --options='!all,use-set,type,uid,gid,mode,size,time,md5,sha256' \
             -C pkg usr/
 
-          tar --zstd -cf \
-            "minimalnotes-arch.pkg.tar.zst" \
+          tar --zstd -cf "minimalnotes-arch.pkg.tar.zst" \
             -C pkg .PKGINFO .MTREE usr/
 
-      - uses: actions/upload-artifact@v4
+      - uses: softprops/action-gh-release@v2
         with:
-          name: archlinux-bundle
-          path: |
+          files: |
             src-tauri/target/release/minimalnotes-linux.tar.gz
             src-tauri/target/release/minimalnotes-arch.pkg.tar.zst
-
-  release:
-    needs: [linux, windows, archlinux]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Descargar todos los instaladores
-        uses: actions/download-artifact@v4
-        with:
-          merge-multiple: true
-          path: dist-release
-
-      - name: Publicar Release en GitHub
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist-release/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
