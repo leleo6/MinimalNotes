@@ -122,21 +122,20 @@ The resulting packages are placed in `src-tauri/target/release/bundle/`.
 
 ## Cómo instalar
 
-> ⚠️ Aún no hay versiones publicadas. La primera aparecerá cuando el mantenedor ejecute `git tag v0.1.0 && git push origin v0.1.0`.
 
-[![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/Leo-Codex/NOTES/releases/latest)
-[![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/Leo-Codex/NOTES/releases/latest)
-[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/Leo-Codex/NOTES/releases/latest)
+[![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/Leo-Codex/NOTES/releases/latest/download/MinimalNotes-windows.exe)
+[![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/Leo-Codex/NOTES/releases/latest/download/minimalnotes-linux.tar.gz)
+[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/Leo-Codex/NOTES/releases/latest/download/minimalnotes-arch.pkg.tar.zst)
 [![All versions](https://img.shields.io/badge/-All_Versions-lightgrey?style=for-the-badge)](https://github.com/Leo-Codex/NOTES/releases)
 
 ### Release files
 
 | Archivo | Plataforma | Instalación |
 |---|---|---|
-| `MinimalNotes_*_x64-setup.exe` | **Windows** | Doble clic → siguiente → listo |
-| `MinimalNotes_*_x64.msi` | **Windows** | Doble clic → instalar |
-| `minimalnotes_*_amd64.tar.gz` | **Cualquier Linux** | Ver instrucciones abajo |
-| `minimalnotes-*-x86_64.pkg.tar.zst` | **Arch Linux** | `sudo pacman -U archivo` |
+| `MinimalNotes-windows.exe` | **Windows** | Doble clic → siguiente → listo |
+| `MinimalNotes-windows.msi` | **Windows** | Doble clic → instalar |
+| `minimalnotes-linux.tar.gz` | **Cualquier Linux** | Ver instrucciones abajo |
+| `minimalnotes-arch.pkg.tar.zst` | **Arch Linux** | `sudo pacman -U archivo` |
 
 ### Windows
 
@@ -184,9 +183,9 @@ Cada vez que se crea un tag `v*` (ej. `git tag v0.1.0 && git push origin v0.1.0`
 
 | Máquina | Genera |
 |---|---|
-| Ubuntu | `.tar.gz` + AppImage |
-| Windows | `.msi` + `.exe` |
-| Arch Linux (contenedor) | `.pkg.tar.zst` + `.tar.gz` |
+| Ubuntu | `minimalnotes-linux.tar.gz` + `MinimalNotes-linux.AppImage` |
+| Windows | `MinimalNotes-windows.msi` + `MinimalNotes-windows.exe` |
+| Arch Linux (contenedor) | `minimalnotes-arch.pkg.tar.zst` + `minimalnotes-linux.tar.gz` |
 
 ---
 
