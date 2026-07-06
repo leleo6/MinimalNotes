@@ -108,31 +108,44 @@ This starts the Tauri development server with hot-reload on both the Rust and fr
 npm run build
 ```
 
-The resulting installer is placed in `src-tauri/target/release/bundle/`. On Linux, this produces `.deb` and `.rpm` packages.
+The resulting packages are placed in `src-tauri/target/release/bundle/`.
+
+| Platform  | Output                              |
+|-----------|-------------------------------------|
+| Linux     | `.tar.gz` (portable)                |
+| Arch      | `.pkg.tar.zst` (native package)     |
+| Windows   | `.msi` + `.exe` (installer)         |
+
+> **Note**: Build locally for the platform you're on. Arch Linux packages require Arch Linux (`makepkg`). For automated multi-platform builds, see [Continuous Builds](#continuous-builds).
 
 ---
 
-## Cross-Platform Builds
+## Download
 
-Tauri is inherently cross-platform. The recommended approach is to build natively on each target:
+Pre-built binaries are available on the [Releases page](https://github.com/Leo-Codex/NOTES/releases).
 
-| Platform  | Command             | Output                         |
-|-----------|---------------------|--------------------------------|
-| Linux     | `npm run build`     | `.deb`, `.rpm`, AppImage        |
-| Windows   | `npm run build`     | `.msi`, `.exe`                  |
-| macOS     | `npm run build`     | `.dmg`                          |
+| File | Platform | Install |
+|---|---|---|
+| `MinimalNotes-*.tar.gz` | **Any Linux** | `tar -xzf` and run `./minimalnotes` |
+| `MinimalNotes-*.pkg.tar.zst` | **Arch Linux** | `sudo pacman -U file.pkg.tar.zst` |
+| `MinimalNotes-*.msi` | **Windows** | Double-click |
+| `MinimalNotes-*-setup.exe` | **Windows** | Double-click |
 
-### Cross-Compilation (Linux to Windows)
+> **Requirements**: Linux `.tar.gz` needs `webkit2gtk-4.1` installed system-wide.
 
-```bash
-rustup target add x86_64-pc-windows-msvc
-cargo install cargo-xwin
-npm run build -- --target x86_64-pc-windows-msvc
-```
+---
 
-### CI/CD Automation
+## Continuous Builds
 
-The official [tauri-apps/tauri-action](https://github.com/tauri-apps/tauri-action) GitHub Action can be configured to build for all three platforms automatically on every commit or release.
+Every tagged release (`git tag v0.2.0 && git push origin v0.2.0`) triggers an automated build via **GitHub Actions** with three parallel jobs:
+
+| Job | Runner | Produces |
+|---|---|---|
+| `linux` | ubuntu-latest | `.tar.gz` |
+| `windows` | windows-latest | `.msi` + `.exe` |
+| `archlinux` | Arch Linux container | `.pkg.tar.zst` + `.tar.gz` |
+
+All artifacts are uploaded to the corresponding [GitHub Release](https://github.com/Leo-Codex/NOTES/releases). The workflow file is at `.github/workflows/release.yml`.
 
 ---
 

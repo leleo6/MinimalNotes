@@ -1,0 +1,177 @@
+name: Release
+on:
+  push:
+    tags: [ 'v*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - run: npm ci
+
+      - run: npm run tauri build -- --bundles appimage
+
+      - name: Create .tar.gz
+        run: |
+          cd src-tauri/target/release
+          tar -czf "minimalnotes-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" \
+            minimalnotes
+          ls -lh *.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-bundle
+          path: |
+            src-tauri/target/release/minimalnotes-*-linux.tar.gz
+            src-tauri/target/release/bundle/appimage/*.AppImage
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - run: npm ci
+
+      - run: npm run tauri build -- --bundles msi,nsis
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-bundle
+          path: |
+            src-tauri/target/release/bundle/msi/*
+            src-tauri/target/release/bundle/nsis/*
+
+  archlinux:
+    runs-on: ubuntu-latest
+    container:
+      image: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          pacman -Syu --noconfirm
+          pacman -S --noconfirm \
+            webkit2gtk-4.1 \
+            gtk3 \
+            base-devel \
+            curl \
+            wget \
+            file \
+            openssl \
+            librsvg \
+            libxdo \
+            nodejs \
+            npm \
+            rust \
+            git
+
+      - run: npm ci
+
+      - run: npm run tauri build
+
+      - name: Create .tar.gz
+        run: |
+          cd src-tauri/target/release
+          tar -czf "minimalnotes-${GITHUB_REF_NAME#v}-x86_64-linux.tar.gz" \
+            minimalnotes
+
+      - name: Create .pkg.tar.zst
+        run: |
+          pkgver="${GITHUB_REF_NAME#v}"
+          pkgrel=1
+          pkgname=minimalnotes
+
+          mkdir -p pkg/usr/bin pkg/usr/share/applications pkg/usr/share/pixmaps
+
+          install -Dm755 "src-tauri/target/release/${pkgname}" \
+            "pkg/usr/bin/${pkgname}"
+
+          install -Dm644 "src-tauri/icons/icon.png" \
+            "pkg/usr/share/pixmaps/${pkgname}.png"
+
+          cat > "pkg/usr/share/applications/${pkgname}.desktop" << DESKTOP_EOF
+[Desktop Entry]
+Type=Application
+Name=MinimalNotes
+Comment=Editor de texto plano ultra-ligero
+Exec=${pkgname}
+Icon=${pkgname}
+Categories=Utility;TextEditor;
+Terminal=false
+DESKTOP_EOF
+
+          cat > pkg/.PKGINFO << PKGINFO_EOF
+pkgname = ${pkgname}
+pkgver = ${pkgver}-${pkgrel}
+pkgdesc = Editor de texto plano ultra-ligero
+url = https://github.com/Leo-Codex/NOTES
+builddate = $(date +%s)
+packager = MinimalNotes CI
+size = $(du -sk pkg | cut -f1)
+arch = x86_64
+license = MIT
+depend = webkit2gtk-4.1
+depend = gtk3
+depend = glibc
+PKGINFO_EOF
+
+          bsdtar -czf pkg/.MTREE --format=mtree \
+            --options='!all,use-set,type,uid,gid,mode,size,time,md5,sha256' \
+            -C pkg usr/
+
+          tar --zstd -cf \
+            "${pkgname}-${pkgver}-${pkgrel}-x86_64.pkg.tar.zst" \
+            -C pkg .PKGINFO .MTREE usr/
+
+          ls -lh *.pkg.tar.zst
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archlinux-bundle
+          path: |
+            src-tauri/target/release/minimalnotes-*.tar.gz
+            src-tauri/target/release/minimalnotes-*.pkg.tar.zst
+
+  release:
+    needs: [linux, windows, archlinux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: '*/*'
