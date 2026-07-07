@@ -118,7 +118,7 @@ The resulting packages are placed in `src-tauri/target/release/bundle/`.
 
 > **Note**: Build locally for the platform you're on. Arch Linux packages require Arch Linux (`makepkg`). For automated multi-platform builds, see [Continuous Builds](#continuous-builds).
 
----
+---a
 
 ## Cómo instalar
 
