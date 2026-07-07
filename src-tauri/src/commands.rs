@@ -11,6 +11,7 @@ use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
 
 use crate::file_manager;
+use crate::StartupPayload;
 
 /// Abre un diálogo nativo de "Abrir archivo" y devuelve su contenido.
 ///
@@ -59,4 +60,14 @@ pub async fn save_file_as(app: AppHandle, content: String) -> Result<String, Str
 #[tauri::command]
 pub async fn save_file(path: String, content: String) -> Result<(), String> {
     file_manager::write_file(&path, &content)
+}
+
+/// Devuelve el archivo pasado como argumento CLI (si existe).
+///
+/// Usado en arranque en frío para abrir el primer archivo en la ventana principal.
+#[tauri::command]
+pub fn get_startup_file(
+    state: tauri::State<'_, StartupPayload>,
+) -> Option<crate::FilePayload> {
+    state.0.lock().unwrap().take()
 }

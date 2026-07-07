@@ -1,38 +1,108 @@
-// main.rs — Punto de entrada del proceso Rust (Core).
-//
-// Principio SRP: única responsabilidad = arrancar el ciclo de
-// vida de Tauri, registrar plugins y comandos IPC.
-// La lógica de negocio vive en commands.rs y file_manager.rs.
-
-// Evitar ventana de consola en Windows en release builds
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
 mod file_manager;
 
-use tauri::Manager;
+use std::fs;
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+
+#[derive(Clone, serde::Serialize)]
+struct FilePayload {
+    path: String,
+    content: String,
+    is_new: bool,
+}
+
+struct StartupPayload(Mutex<Option<FilePayload>>);
 
 fn main() {
     tauri::Builder::default()
-        // Plugin de almacenamiento key-value resiliente a crashes
         .plugin(tauri_plugin_store::Builder::default().build())
-        // Plugin de diálogos nativos del SO
         .plugin(tauri_plugin_dialog::init())
-        // Al cerrar la ventana principal, cerrar también la de configuración si está abierta
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            let paths: Vec<String> = args.into_iter().skip(1).collect();
+            if paths.is_empty() {
+                if let Some(main_win) = app.get_webview_window("main") {
+                    let _ = main_win.set_focus();
+                }
+                return;
+            }
+            let mut win_counter = 0u64;
+            for (i, path_str) in paths.iter().enumerate() {
+                let (content, is_new) = match fs::read_to_string(path_str) {
+                    Ok(c) => (c, false),
+                    Err(_) => (String::new(), true),
+                };
+                let payload = FilePayload { path: path_str.clone(), content, is_new };
+                if i == 0 {
+                    if let Some(main_win) = app.get_webview_window("main") {
+                        let _ = main_win.emit("open-cli-file", payload);
+                        let _ = main_win.set_focus();
+                    }
+                } else {
+                    win_counter += 1;
+                    let ts = SystemTime::now()
+                        .duration_since(UNIX_EPOCH).unwrap().as_nanos();
+                    let label = format!("cli_{}_{}", ts, win_counter);
+                    let _ = WebviewWindowBuilder::new(app, &label, WebviewUrl::default())
+                        .title(format!("MinimalNotes — {}", path_str))
+                        .inner_size(800.0, 600.0)
+                        .initialization_script(&format!(
+                            "window.__CLI_DATA__ = {};",
+                            serde_json::to_string(&payload).unwrap()
+                        ))
+                        .build();
+                }
+            }
+        }))
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { .. } = event {
                 if window.label() == "main" {
-                    if let Some(settings_win) = window.get_webview_window("settings") {
-                        let _ = settings_win.close();
+                    if let Some(s) = window.get_webview_window("settings") {
+                        let _ = s.close();
                     }
                 }
             }
         })
-        // Registro de comandos IPC expuestos al frontend
+        .setup(|app| -> Result<(), Box<dyn std::error::Error>> {
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            let main_payload = if !args.is_empty() {
+                let first = &args[0];
+                let (content, is_new) = match fs::read_to_string(first) {
+                    Ok(c) => (c, false),
+                    Err(_) => (String::new(), true),
+                };
+                for (j, path_str) in args.iter().skip(1).enumerate() {
+                    let (c, n) = match fs::read_to_string(path_str) {
+                        Ok(content) => (content, false),
+                        Err(_) => (String::new(), true),
+                    };
+                    let p = FilePayload { path: path_str.clone(), content: c, is_new: n };
+                    let ts = SystemTime::now()
+                        .duration_since(UNIX_EPOCH).unwrap().as_nanos();
+                    let label = format!("cli_{}_{}", ts, j);
+                    WebviewWindowBuilder::new(app.handle(), &label, WebviewUrl::default())
+                        .title(format!("MinimalNotes — {}", path_str))
+                        .initialization_script(&format!(
+                            "window.__CLI_DATA__ = {};",
+                            serde_json::to_string(&p).unwrap()
+                        ))
+                        .build()?;
+                }
+                Some(FilePayload { path: first.clone(), content, is_new })
+            } else {
+                None
+            };
+            app.manage(StartupPayload(Mutex::new(main_payload)));
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::open_file,
             commands::save_file_as,
             commands::save_file,
+            commands::get_startup_file,
         ])
         .run(tauri::generate_context!())
         .expect("Error al iniciar MinimalNotes");

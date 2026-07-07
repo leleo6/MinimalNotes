@@ -1,6 +1,6 @@
-import { setNotes, setActiveId, getActiveNote } from './state.js';
-import { loadFromStore, loadSettingsFromStore } from './store.js';
-import { createNote, openFileFromSystem, saveActiveNoteToSystem } from './notes.js';
+import { setNotes, setActiveId, getActiveNote, addNote, getNotes } from './state.js';
+import { loadFromStore, loadSettingsFromStore, saveToStore } from './store.js';
+import { createNote, createNoteShape, openFileFromSystem, saveActiveNoteToSystem } from './notes.js';
 import { CONFIG_DEFAULTS, applyConfigToDOM } from './config.js';
 import { renderSidebar }                              from './ui/sidebar.js';
 import { renderEditor, changeZoom, resetZoom, zoomLevel } from './ui/editor.js';
@@ -156,6 +156,31 @@ function registerKeyboardShortcuts() {
   document.addEventListener('wheel', _wheelHandler);
 }
 
+async function handleOpenFilePayload(payload) {
+  if (!payload || !payload.path) return;
+  const { path: filePath, content, is_new: isNew } = payload;
+  const existing = getNotes().find(n => n.filePath === filePath);
+  let note;
+  if (existing) {
+    existing.body = content;
+    existing.updatedAt = Date.now();
+    setActiveId(existing.id);
+    note = existing;
+  } else {
+    note = createNoteShape(content, filePath);
+    addNote(note);
+    setActiveId(note.id);
+  }
+  await saveToStore(getNotes());
+  if (isNew) {
+    const { message } = window.__TAURI__.dialog;
+    await message(`La ruta '${filePath}' no existe.\nSe creará un nuevo archivo al guardar.`, {
+      title: 'Nuevo archivo',
+      kind: 'info'
+    });
+  }
+}
+
 async function init() {
   const loadedConfig = await loadSettingsFromStore();
   if (loadedConfig) {
@@ -200,6 +225,23 @@ async function init() {
   }
   setActiveId(initialNoteId);
 
+  try {
+    const cliData = await window.__TAURI__.core.invoke('get_startup_file');
+    if (cliData) {
+      await handleOpenFilePayload(cliData);
+    }
+  } catch (_) {}
+
+  if (window.__CLI_DATA__) {
+    await handleOpenFilePayload(window.__CLI_DATA__);
+    delete window.__CLI_DATA__;
+  }
+
+  const activeNote = getActiveNote();
+  if (activeNote) {
+    initialNoteId = activeNote.id;
+  }
+
   let windowLabel = params.get('window') || getCurrentWindowLabel();
 
   registerCurrentWindow(initialNoteId, zoomLevel);
@@ -209,6 +251,13 @@ async function init() {
   registerSyncListeners(() => {
     renderAll();
   });
+
+  try {
+    window.__TAURI__.event.listen('open-cli-file', async (event) => {
+      await handleOpenFilePayload(event.payload);
+      renderAll();
+    });
+  } catch (_) {}
 
   registerKeyboardShortcuts();
   renderAll();

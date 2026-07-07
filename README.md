@@ -125,7 +125,7 @@ The resulting packages are placed in `src-tauri/target/release/bundle/`.
 
 [![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_x64-setup.exe)
 [![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_amd64.AppImage)
-[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/leleo6/NOTES/releases/latest)
+[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes-arch.pkg.tar.zst)
 [![All versions](https://img.shields.io/badge/-All_Versions-lightgrey?style=for-the-badge)](https://github.com/leleo6/NOTES/releases)
 
 ### Release files
