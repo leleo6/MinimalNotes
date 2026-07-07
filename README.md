@@ -4,7 +4,7 @@
 [![Tauri](https://img.shields.io/badge/Tauri-v2-%23FFC131)](https://v2.tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-2021-edition-dea584)](https://www.rust-lang.org)
 [![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-yellow)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-lightgrey)](https://github.com/Leo-Codex/NOTES/releases)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20Windows-lightgrey)](https://github.com/leleo6/NOTES/releases)
 
 **MinimalNotes** is an ultra-lightweight, offline-first plain-text editor for the desktop. It prioritizes speed, simplicity, and resource efficiency, achieving an executable size of approximately **5 MB** and a memory footprint of roughly **50 MB RAM** -- comparable to the most basic system utilities.
 
@@ -123,22 +123,23 @@ The resulting packages are placed in `src-tauri/target/release/bundle/`.
 ## Cómo instalar
 
 
-[![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/Leo-Codex/NOTES/releases/latest)
-[![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/Leo-Codex/NOTES/releases/latest)
-[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/Leo-Codex/NOTES/releases/latest)
-[![All versions](https://img.shields.io/badge/-All_Versions-lightgrey?style=for-the-badge)](https://github.com/Leo-Codex/NOTES/releases)
+[![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_x64-setup.exe)
+[![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_amd64.AppImage)
+[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/leleo6/NOTES/releases/latest)
+[![All versions](https://img.shields.io/badge/-All_Versions-lightgrey?style=for-the-badge)](https://github.com/leleo6/NOTES/releases)
 
 ### Release files
 
-Los instalables se generan automáticamente al crear una release. En la [página de Releases](https://github.com/Leo-Codex/NOTES/releases) encontrarás:
+Los instalables se generan automáticamente al crear una release. En la [página de Releases](https://github.com/leleo6/NOTES/releases) encontrarás:
 
 | Archivo | Plataforma | Instalación |
 |---|---|---|
-| `*_x64-setup.exe` | **Windows** | Doble clic → siguiente → listo |
-| `*_x64.msi` | **Windows** | Doble clic → instalar |
-| `*.AppImage` | **Cualquier Linux** | `chmod +x` y ejecutar |
+| [`minimalnotes_0.1.0_x64-setup.exe`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_x64-setup.exe) | **Windows** | Doble clic → siguiente → listo |
+| [`minimalnotes_0.1.0_x64_en-US.msi`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_x64_en-US.msi) | **Windows** | Doble clic → instalar |
+| [`minimalnotes_0.1.0_amd64.AppImage`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_amd64.AppImage) | **Cualquier Linux** | `chmod +x` y ejecutar |
+| [`minimalnotes_0.1.0_amd64.deb`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_amd64.deb) | **Ubuntu/Debian** | `sudo dpkg -i archivo` |
 | `minimalnotes-linux.tar.gz` | **Cualquier Linux** | Ver instrucciones abajo |
-| `minimalnotes-arch.pkg.tar.zst` | **Arch Linux** | `sudo pacman -U archivo` |
+| [`minimalnotes-arch.pkg.tar.zst`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes-arch.pkg.tar.zst) | **Arch Linux** | `sudo pacman -U archivo` |
 
 ### Windows
 
