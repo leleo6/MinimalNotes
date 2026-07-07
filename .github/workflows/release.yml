@@ -87,7 +87,7 @@ jobs:
 
           mkdir -p pkg/usr/bin pkg/usr/share/applications pkg/usr/share/pixmaps
           install -Dm755 minimalnotes pkg/usr/bin/minimalnotes
-          install -Dm644 ../../../icons/icon.png pkg/usr/share/pixmaps/minimalnotes.png
+          install -Dm644 ../../icons/icon.png pkg/usr/share/pixmaps/minimalnotes.png
 
           {
             echo '[Desktop Entry]'
