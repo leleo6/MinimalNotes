@@ -71,3 +71,9 @@ pub fn get_startup_file(
 ) -> Option<crate::FilePayload> {
     state.0.lock().unwrap().take()
 }
+
+/// Lee el contenido de un archivo en disco directamente (sin diálogo nativo).
+#[tauri::command]
+pub async fn read_file(path: String) -> Result<String, String> {
+    file_manager::read_file(&path)
+}

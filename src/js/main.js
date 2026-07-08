@@ -207,6 +207,20 @@ async function init() {
   if (!saved || !Array.isArray(saved)) {
     saved = await loadFromStore();
   }
+
+  if (saved && Array.isArray(saved)) {
+    await Promise.all(saved.map(async (note) => {
+      if (note.filePath) {
+        try {
+          const content = await window.__TAURI__.core.invoke('read_file', { path: note.filePath });
+          note.body = content;
+        } catch (err) {
+          console.warn(`[main] no se pudo leer el archivo en ${note.filePath}:`, err);
+        }
+      }
+    }));
+  }
+
   if (!saved || !Array.isArray(saved) || saved.length === 0) {
     saved = [{
       id: uid(),

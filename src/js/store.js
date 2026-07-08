@@ -23,7 +23,13 @@ let _store = null;
  */
 async function getStore() {
   if (_store) return _store;
-  const { Store } = await import('@tauri-apps/plugin-store');
+  let Store;
+  if (window.__TAURI__ && window.__TAURI__.store) {
+    Store = window.__TAURI__.store.Store;
+  } else {
+    const mod = await import('@tauri-apps/plugin-store');
+    Store = mod.Store;
+  }
   _store = await Store.load(STORE_FILE, { autoSave: false });
   return _store;
 }
