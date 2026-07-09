@@ -49,6 +49,8 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'v__VERSION__'
           releaseBody: 'Release generada automáticamente por GitHub Actions.'
+          releaseDraft: true
+          allowUpdates: true
 
   archlinux:
     needs: [build]
