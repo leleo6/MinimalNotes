@@ -1,20 +1,39 @@
+/**
+ * editor.js — Panel del editor principal.
+ * 
+ * Principio SRP: Responsable único del renderizado del editor de texto y controles de pie de página.
+ * Principio DIP: Utiliza el adaptador ipc.js para confirmaciones de borrado.
+ */
+
 import { getActiveNote } from '../state.js';
-import { wordCount, showTemporalIndicator } from '../utils.js';
+import { wordCount } from '../utils.js';
 import { updateNoteBody, deleteNote } from '../notes.js';
 import { pushSnapshot } from '../history.js';
 import { isSearchOpen, renderSearchPanel } from './search.js';
+import { ask } from '../ipc.js';
 
 export let zoomLevel = 100;
 
+/**
+ * Define el nivel de zoom y lo limita entre 80% y 200%.
+ * @param {number} val 
+ */
 export function setZoomLevel(val) {
   zoomLevel = Math.max(80, Math.min(200, val));
 }
 
+/**
+ * Incrementa o decrementa el zoom.
+ * @param {number} delta 
+ */
 export function changeZoom(delta) {
   setZoomLevel(zoomLevel + delta);
   applyZoom();
 }
 
+/**
+ * Restablece el zoom al valor inicial (100%).
+ */
 export function resetZoom() {
   zoomLevel = 100;
   applyZoom();
@@ -35,6 +54,9 @@ function applyZoom() {
   }
 }
 
+/**
+ * Renderiza el editor basándose en si existe una nota activa.
+ */
 export function renderEditor(callbacks) {
   const pane = document.getElementById('editorPane');
   if (!pane) return;
@@ -164,40 +186,29 @@ function renderActiveEditor(pane, note, callbacks) {
   document.getElementById('btnSave').addEventListener('click', callbacks.onSaveNote);
   document.getElementById('btnSettings').addEventListener('click', callbacks.onOpenSettings);
   document.getElementById('btnDelete').addEventListener('click', async () => {
-    try {
-      const { ask } = window.__TAURI__.dialog;
-      const confirmed = await ask('¿Estás seguro de que deseas eliminar esta nota? Esta acción es definitiva.', {
-        title: 'Eliminar nota',
-        kind: 'warning',
-        okLabel: 'Eliminar',
-        cancelLabel: 'Cancelar'
-      });
-      if (confirmed) {
-        await deleteNote(note.id);
-        callbacks.onDeleteNote();
-      }
-    } catch (err) {
-      console.warn('[editor] diálogo de confirmación no disponible:', err);
-      const fallback = window.confirm('¿Estás seguro de que deseas eliminar esta nota? Esta acción es definitiva.');
-      if (fallback) {
-        await deleteNote(note.id);
-        callbacks.onDeleteNote();
-      }
+    const confirmed = await ask('¿Estás seguro de que deseas eliminar esta nota? Esta acción es definitiva.', {
+      title: 'Eliminar nota',
+      kind: 'warning',
+      okLabel: 'Eliminar',
+      cancelLabel: 'Cancelar'
+    });
+    if (confirmed) {
+      await deleteNote(note.id);
+      callbacks.onDeleteNote();
     }
   });
 }
 
 function attachInputHandlers(bodyInput, wordCountEl, note, callbacks) {
+  let snapTimer;
+  
+  // FIX: Unificados listeners duplicados de 'input' en un solo gestor DRY
   bodyInput.addEventListener('input', () => {
     updateNoteBody(note.id, bodyInput.value);
     wordCountEl.textContent = `${wordCount(bodyInput.value)} palabras`;
     autoGrow(bodyInput);
-    showTemporalIndicator(document.getElementById('saveIndicator'));
     callbacks.onInput();
-  });
 
-  let snapTimer;
-  bodyInput.addEventListener('input', () => {
     clearTimeout(snapTimer);
     snapTimer = setTimeout(() => {
       pushSnapshot(note.id, bodyInput.value);
@@ -240,4 +251,23 @@ function attachMenuHandlers() {
 function autoGrow(el) {
   el.style.height = 'auto';
   el.style.height = Math.max(el.scrollHeight, 300) + 'px';
+}
+
+// FIX: Escuchar eventos 'save-status' en caliente para cambiar dinámicamente la etiqueta de guardado
+if (typeof window !== 'undefined') {
+  window.addEventListener('save-status', (e) => {
+    const indicator = document.getElementById('saveIndicator');
+    if (!indicator) return;
+    if (e.detail.saving) {
+      indicator.textContent = 'Guardando...';
+      indicator.classList.add('visible');
+      clearTimeout(indicator._hideTimer);
+    } else {
+      indicator.textContent = '✓ guardado';
+      clearTimeout(indicator._hideTimer);
+      indicator._hideTimer = setTimeout(() => {
+        indicator.classList.remove('visible');
+      }, 1500);
+    }
+  });
 }

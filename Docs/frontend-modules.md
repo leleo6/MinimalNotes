@@ -17,22 +17,23 @@ src/
 │   └── Lora-SemiBold.woff2
 └── js/
     ├── main.js             # Orquestador principal
-    ├── state.js            # Estado en memoria
-    ├── store.js            # Capa de persistencia
+    ├── ipc.js              # Adaptador de comunicación con Tauri (DIP)
+    ├── state.js            # Estado en memoria (DRY)
+    ├── store.js            # Capa de persistencia (Singleton seguro)
     ├── config.js           # Configuración centralizada
-    ├── notes.js            # CRUD de notas
+    ├── notes.js            # Operaciones de negocio de notas
     ├── windows.js          # Gestión multi-ventana
-    ├── history.js          # Deshacer/rehacer
+    ├── history.js          # Deshacer/rehacer (DRY y memory-leak free)
     ├── utils.js            # Utilerías
     ├── drag.js             # Arrastrar para abrir ventana
     ├── stepper.js          # Componente stepper reutilizable
     ├── sync.js             # Sincronización entre ventanas
-    ├── settings.js         # Lógica de ventana de configuración
+    ├── settings.js         # Lógica de ventana de configuración (declarativo & OCP)
     └── ui/
         ├── sidebar.js      # Barra lateral (Spine)
         ├── tabbar.js       # Barra de pestañas
-        ├── editor.js       # Panel del editor
-        └── search.js       # Panel de buscar y reemplazar
+        ├── editor.js       # Panel del editor (live save-status events)
+        └── search.js       # Panel de buscar y reemplazar (reemplazo seguro)
 ```
 
 ---
@@ -69,7 +70,36 @@ Punto de entrada de la aplicación. Se ejecuta al cargar `index.html`.
 
 ---
 
-### `state.js` — Estado en Memoria
+### `ipc.js` — Adaptador de Comunicación (Dependency Inversion)
+
+Centraliza y encapsula todas las APIs nativas de Tauri (`core.invoke`, `event.emit`, `event.listen`, diálogos y manejo de ventanas).
+
+**Responsabilidades:**
+- Servir de puente desacoplador entre el código del frontend y el entorno nativo de Tauri.
+- Proporcionar mocks funcionales cuando la aplicación se ejecuta en entornos web normales (sin Tauri).
+- Gestionar de forma robusta las promesas de desregistro (`unlisten`) de eventos globales y de ventana de Tauri de forma sincrónica.
+
+**API:**
+| Función | Descripción |
+|---------|-------------|
+| `isTauriAvailable()` | Retorna `true` si `window.__TAURI__` está presente |
+| `invoke(cmd, args)` | Invoca comandos en el backend con mocks integrados |
+| `emit(event, payload)` | Emite un evento global de Tauri de forma segura |
+| `listen(event, callback)` | Registra listeners globales y retorna una función de desregistro síncrona |
+| `ask(msg, options)` | Muestra diálogo de confirmación nativo (o fallback a `confirm`) |
+| `showMessage(msg, options)` | Muestra diálogo informativo nativo (o fallback a `alert`) |
+| `getCurrentWindowLabel()` | Retorna el label de la WebviewWindow actual |
+| `setWindowFocus(label)` | Da foco a la ventana especificada por label |
+| `createWebviewWindow(label, opts)` | Instancia una nueva ventana de navegador Tauri |
+| `closeCurrentWindow()` | Cierra de manera segura la ventana actual |
+| `setWindowBackgroundColor(hex)` | Cambia el fondo del WebView nativo |
+| `listenToWindow(event, cb)` | Escucha eventos de ventana Tauri y retorna un desregistro síncrono |
+| `getWindowPosition()` | Retorna coordenadas `{x, y}` nativas |
+| `getWindowSize()` | Retorna tamaño `{width, height}` nativo |
+
+---
+
+### `state.js` — Estado en Memoria (DRY)
 
 Mantiene el estado reactivo de la aplicación.
 
@@ -118,7 +148,7 @@ Capa única de persistencia mediante `tauri-plugin-store`.
 | `loadWindowStates()` | Carga estados de ventanas |
 | `saveWindowStates(states)` | Guarda estados de ventanas |
 
-**Patrón Singleton:** Una única instancia de Store es creada al inicio para evitar condiciones de carrera.
+**Patrón Singleton Seguro:** Una única instancia de Store es expuesta de forma thread-safe inicializándose con una promesa cacheada (`_storePromise`) para evitar condiciones de carrera cuando múltiples llamadas concurrentes intentan abrir el archivo de store a la vez. Limpia la caché si la carga inicial falla para permitir reintentos.
 
 ---
 
@@ -151,40 +181,41 @@ Define valores por defecto y aplica configuración al DOM.
 
 ---
 
-### `notes.js` — CRUD de Notas
+### `notes.js` — Operaciones de Negocio de Notas
 
-Operaciones de negocio sobre notas.
+Operaciones de negocio y de orquestación de almacenamiento para notas.
 
 **API:**
 | Función | Descripción |
 |---------|-------------|
-| `createNote(body, path)` | Crea una nueva nota, aplica límite de caché |
-| `deleteNote(id)` | Elimina nota del estado y store |
-| `updateNoteBody(id, body)` | Actualiza contenido con debounce y auto-save |
-| `openFileFromSystem()` | Abre archivo del sistema via diálogo nativo |
-| `saveActiveNoteToSystem()` | Guarda nota activa a disco |
+| `createNote(body, path)` | Crea una nueva nota, aplica límite de caché y emite evento sync |
+| `deleteNote(id)` | Elimina nota del estado, store, limpia historial y emite evento sync |
+| `updateNoteBody(id, body)` | Actualiza contenido, despacha eventos `save-status`, y programa guardado con debounce |
+| `openNewNoteWindow()` | Crea una nota nueva en memoria y la abre en una ventana independiente |
+| `openFileFromSystem()` | Abre archivo del sistema via diálogo nativo usando `ipc.js` |
+| `saveActiveNoteToSystem()` | Guarda nota activa a disco usando comandos de `ipc.js` |
 
-**Límite de caché:** Al alcanzar el límite configurado (`notesLimit`), se elimina automáticamente la nota no guardada más antigua.
+**Límite de caché:** Al alcanzar el límite configurado (`notesLimit`), se elimina automáticamente la nota no guardada más antigua y se purga su historial para evitar memory leaks.
 
-**Debounce:** `updateNoteBody` usa debounce de 500ms para evitar escrituras frecuentes al store.
+**Eventos de guardado (save-status):** Al modificar el cuerpo de la nota, se emite inmediatamente un evento global `save-status` con `{ saving: true }`. Al completarse el guardado diferido (debounced a 500ms), se emite `{ saving: false }`.
 
 ---
 
 ### `windows.js` — Gestión Multi-ventana
 
-Maneja la creación, seguimiento y sincronización de ventanas.
+Maneja el seguimiento de ventanas abiertas y la persistencia de su geometría de forma aislada y desacoplada de la lógica de notas.
 
 **API:**
 | Función | Descripción |
 |---------|-------------|
-| `getWindows()` | Retorna el Map de ventanas abiertas |
-| `register()` | Registra la ventana actual en el sistema |
-| `openNoteWindow(noteId)` | Abre una nota en ventana independiente |
-| `openNewNoteWindow()` | Crea una nota nueva en ventana nueva |
-| `setupWindowState(window)` | Persigue geometría de ventana |
-| `restoreWindowState(window)` | Restaura geometría guardada |
+| `getOpenWindows()` | Retorna el Map de ventanas abiertas en esta sesión |
+| `registerCurrentWindow(noteId, zoom)` | Registra la ventana actual y emite evento de apertura |
+| `openNoteWindow(noteId)` | Abre una nota existente en una ventana independiente |
+| `saveWindowState(label, noteId, zoom)` | Guarda las coordenadas geométricas y zoom en el store |
+| `setupWindowStatePersistence(label, noteId)` | Monitorea eventos de resize/move y beforeunload para persistir geometría |
+| `loadSavedWindowStates()` | Retorna la lista de geometrías de ventana guardadas |
 
-**Etiquetado de ventanas:** Cada ventana recibe una label única `mn-note-` + noteId.
+**Geometría y Zoom:** Al mover o redimensionar la ventana, se ejecuta un guardado diferido de su posición. Si no se provee el zoom en el guardado, se recupera de manera segura el zoom activo desde el mapa de memoria `openWindows`.
 
 ---
 
@@ -284,15 +315,15 @@ Mantiene todas las ventanas sincronizadas mediante eventos de Tauri.
 Lógica de la ventana `settings.html`.
 
 **Responsabilidades:**
-- Cargar configuración inicial desde query params
+- Cargar configuración inicial desde query params con sanitización y fallbacks por defecto
 - Renderizar controles: steppers, selects, inputs, checkboxes
-- Implementar grabación interactiva de atajos de teclado
-- Emitir evento `settings-changed` al cambiar cualquier valor
-- Persistir configuración en store
+- Vincular de manera declarativa los controles de formulario usando el mapeo `CONFIG_FIELDS` (OCP)
+- Implementar grabación interactiva de atajos de teclado con validación de teclas modificadoras
+- Emitir evento `settings-changed` al cambiar cualquier valor y guardarlo en el store a través de `ipc.js`
 - Botón "Aplicar" cierra la ventana
-- Botón "Restablecer" vuelve a valores por defecto
+- Botón "Restablecer" vuelve a valores por defecto y restablece sincronizadamente el estado interno de las instancias de stepper (evitando saltos de valor)
 
-**Grabación de atajos:** Al hacer clic en un botón de atajo, entra en modo "grabación" con animación pulse. Al presionar la combinación deseada, se captura y muestra.
+**Grabación de atajos:** Al hacer clic en un botón de atajo, entra en modo "grabación" con animación pulse. Al presionar la combinación deseada, se captura y muestra. Si se presiona `Escape`, se cancela la grabación sin alterar el atajo anterior.
 
 ---
 
@@ -321,29 +352,33 @@ Renderiza pestañas en la parte superior del editor.
 
 ### `ui/editor.js` — Panel del Editor
 
-Renderiza el área de edición principal.
+Renderiza el área de edición principal y coordina los eventos de escritura del usuario.
 
 **Estados:**
-- **Vacío**: Sin nota activa — muestra icono de párrafo y botones de acción
-- **Activo**: textarea con menú de acciones, footer con word count, zoom indicator, indicador de guardado, y botón de configuración
+- **Vacío**: Sin nota activa — muestra icono de párrafo y botones de acción para crear o abrir archivos.
+- **Activo**: textarea con menú de acciones, footer con word count, zoom indicator, indicador de guardado y botón de configuración.
 
 **Responsabilidades:**
-- Manejar input del textarea (con auto-grow)
-- Zoom (propiedad CSS `zoom`)
+- Manejar input del textarea unificadamente (con auto-grow y registro diferido en el historial)
+- Zoom ajustable (propiedad CSS `zoom` en el contenedor del editor)
 - Actualizar word count en tiempo real
-- Integrar historial de undo/redo (Ctrl+Z / Ctrl+Shift+Z)
+- Integrar historial de undo/redo (Ctrl+Z / Ctrl+Y)
 - Manejar atajos del menú de acciones
 - Integrar panel de búsqueda
+- Confirmación nativa de eliminación delegada a `ipc.js` (con fallback dinámico a `window.confirm`)
+- Monitorear eventos `'save-status'` a nivel de módulo para alternar de forma reactiva el estado `"Guardando..."` y `"✓ guardado"` con fade-out automático.
 
 ### `ui/search.js` — Buscar y Reemplazar
 
-Panel de búsqueda dentro del editor.
+Panel de búsqueda y reemplazo dentro de la nota activa.
 
 **Funcionalidad:**
-- Búsqueda case-insensitive
-- Enter/Shift+Enter para ciclar entre resultados
-- Reemplazar (uno) y Reemplazar todos
-- Toggle con `Ctrl+H`
+- Búsqueda case-insensitive en tiempo real.
+- Enter/Shift+Enter para navegar entre las coincidencias de manera interactiva.
+- Reemplazo unitario seguro: Verifica de forma estricta que el texto en la posición coincida con el término original antes de alterar el documento (evitando la corrupción si el texto cambió externamente).
+- Reemplazo global ("Todo") usando expresiones regulares dinámicas.
+- Sincronización en vivo sin robar el foco de escritura: Actualiza el conteo de resultados en tiempo real cuando el usuario escribe en el editor, y remueve el listener completamente al ocultar el panel para evitar fugas de memoria.
+- Toggle con `Ctrl+H`.
 
 ---
 

@@ -39,6 +39,7 @@ En release, oculta la consola de Windows para que la app funcione como aplicaci�
 **Plugins registrados:**
 - `tauri_plugin_store` — Persistencia JSON
 - `tauri_plugin_dialog` — Diálogos nativos OS
+- `tauri_plugin_single_instance` — Garantiza una única instancia en ejecución del programa redirigiendo los argumentos de línea de comandos (CLI) a la instancia activa
 
 **Eventos manejados:**
 - `on_window_event`: Cuando la ventana principal se cierra (`CloseRequested`), también cierra la ventana de configuración si está abierta, buscándola por su label `settings`.
@@ -47,6 +48,8 @@ En release, oculta la consola de Windows para que la app funcione como aplicaci�
 - `open_file`
 - `save_file_as`
 - `save_file`
+- `get_startup_file`
+- `read_file`
 
 ---
 
@@ -98,6 +101,28 @@ async fn save_file(path: String, content: String) -> Result<(), String>
 1. Recibe una ruta conocida y contenido
 2. Escribe directamente sin diálogo
 3. Usado para "Guardar" en archivos ya abiertos/guardados previamente
+
+### `get_startup_file`
+
+```rust
+#[tauri::command]
+pub fn get_startup_file(state: tauri::State<'_, StartupPayload>) -> Option<crate::FilePayload>
+```
+
+**Flujo:**
+1. Lee y vacía el contenedor del payload de arranque inicial (cold start) en el estado gestionado de Rust.
+2. Retorna el payload de archivo (ruta, contenido, is_new) si existía para que la ventana principal lo cargue.
+
+### `read_file`
+
+```rust
+#[tauri::command]
+pub async fn read_file(path: String) -> Result<String, String>
+```
+
+**Flujo:**
+1. Lee directamente el contenido del archivo de texto en disco sin diálogos.
+2. Retorna el contenido del archivo o error si no es accesible.
 
 ---
 
@@ -162,6 +187,7 @@ pub fn write_file(path: &str, content: &str) -> Result<(), String>
 tauri = { version = "2", features = [] }
 tauri-plugin-store = "2"
 tauri-plugin-dialog = "2"
+tauri-plugin-single-instance = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ```

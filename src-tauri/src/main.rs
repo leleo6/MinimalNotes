@@ -18,6 +18,14 @@ struct FilePayload {
 
 struct StartupPayload(Mutex<Option<FilePayload>>);
 
+/// Helper DRY para obtener estampas de tiempo en nanosegundos (DRY).
+fn get_timestamp_nanos() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_else(|_| std::time::Duration::from_secs(0))
+        .as_nanos()
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -31,8 +39,7 @@ fn main() {
             let paths: Vec<String> = args.into_iter().skip(1).collect();
             if paths.is_empty() {
                 // Abrir una nueva ventana independiente vacía
-                let ts = SystemTime::now()
-                    .duration_since(UNIX_EPOCH).unwrap().as_nanos();
+                let ts = get_timestamp_nanos();
                 let label = format!("cli_empty_{}", ts);
                 let _ = WebviewWindowBuilder::new(app, &label, WebviewUrl::default())
                     .title("MinimalNotes")
@@ -53,8 +60,7 @@ fn main() {
                         Err(_) => (String::new(), true),
                     };
                     let payload = FilePayload { path: absolute_path_str.clone(), content, is_new };
-                    let ts = SystemTime::now()
-                        .duration_since(UNIX_EPOCH).unwrap().as_nanos();
+                    let ts = get_timestamp_nanos();
                     let label = format!("cli_{}_{}", ts, win_counter);
                     let _ = WebviewWindowBuilder::new(app, &label, WebviewUrl::default())
                         .title(format!("MinimalNotes — {}", absolute_path_str))
@@ -82,30 +88,36 @@ fn main() {
         })
         .setup(|app| -> Result<(), Box<dyn std::error::Error>> {
             let args: Vec<String> = std::env::args().skip(1).collect();
+            let current_dir = std::env::current_dir().unwrap_or_default();
+            
             let main_payload = if !args.is_empty() {
-                let first = &args[0];
-                let (content, is_new) = match fs::read_to_string(first) {
+                // FIX: Canonicalizar ruta relativa de cold start uniéndola con el directorio de ejecución actual.
+                let first_path = current_dir.join(&args[0]);
+                let first = first_path.to_string_lossy().to_string();
+                let (content, is_new) = match fs::read_to_string(&first_path) {
                     Ok(c) => (c, false),
                     Err(_) => (String::new(), true),
                 };
+                
                 for (j, path_str) in args.iter().skip(1).enumerate() {
-                    let (c, n) = match fs::read_to_string(path_str) {
+                    let p_path = current_dir.join(path_str);
+                    let p_str = p_path.to_string_lossy().to_string();
+                    let (c, n) = match fs::read_to_string(&p_path) {
                         Ok(content) => (content, false),
                         Err(_) => (String::new(), true),
                     };
-                    let p = FilePayload { path: path_str.clone(), content: c, is_new: n };
-                    let ts = SystemTime::now()
-                        .duration_since(UNIX_EPOCH).unwrap().as_nanos();
+                    let p = FilePayload { path: p_str.clone(), content: c, is_new: n };
+                    let ts = get_timestamp_nanos();
                     let label = format!("cli_{}_{}", ts, j);
                     WebviewWindowBuilder::new(app.handle(), &label, WebviewUrl::default())
-                        .title(format!("MinimalNotes — {}", path_str))
+                        .title(format!("MinimalNotes — {}", p_str))
                         .initialization_script(&format!(
                             "window.__CLI_DATA__ = {};",
                             serde_json::to_string(&p).unwrap()
                         ))
                         .build()?;
                 }
-                Some(FilePayload { path: first.clone(), content, is_new })
+                Some(FilePayload { path: first, content, is_new })
             } else {
                 None
             };

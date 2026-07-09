@@ -9,6 +9,7 @@
  */
 
 import { setNotesLimit, setAutoSave } from './notes.js';
+import { setWindowBackgroundColor } from './ipc.js';
 
 const DEFAULT_SHORTCUTS = {
   newNote:      { modifiers: { ctrl: true,  alt: false, shift: false }, key: 'n'       },
@@ -35,7 +36,7 @@ export const CONFIG_DEFAULTS = {
   shortcuts:   { ...DEFAULT_SHORTCUTS },
 };
 
-/** Devuelve una copia de los atajos por defecto. */
+/** Devuelve una copia profunda de los atajos por defecto. */
 export function getDefaultShortcuts() {
   return Object.fromEntries(
     Object.entries(DEFAULT_SHORTCUTS).map(([k, v]) => [
@@ -66,10 +67,7 @@ export function applyConfigToDOM(config) {
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('mn-theme', theme);
 
-  try {
-    const { getCurrentWindow } = window.__TAURI__.window;
-    getCurrentWindow().setBackgroundColor(THEME_BG[theme] || THEME_BG.light);
-  } catch (_) {}
+  setWindowBackgroundColor(THEME_BG[theme] || THEME_BG.light);
 
   const body = document.getElementById('bodyInput');
   const wrap = document.querySelector('.editor-body-wrap');

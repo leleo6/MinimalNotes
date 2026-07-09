@@ -1,9 +1,23 @@
+/**
+ * search.js — Panel de búsqueda y reemplazo.
+ * 
+ * Principio SRP: Responsable exclusivo de la lógica de búsqueda de texto, navegación de coincidencias y reemplazo en el editor.
+ * FIX: Valida coincidencias antes del reemplazo para evitar la corrupción de texto por desincronización de índices.
+ */
+
 export let isSearchOpen = false;
 let searchTerm = '';
 let replaceTerm = '';
 let matches = [];
 let currentMatchIndex = -1;
 
+let _bodyInputListener = null;
+let _attachedBodyInput = null;
+let _performSearchRef = null;
+
+/**
+ * Alterna la visibilidad del panel de búsqueda y limpia recursos si se cierra.
+ */
 export function toggleSearch() {
   const panel = document.getElementById('searchPanel');
   if (!panel) return;
@@ -11,9 +25,43 @@ export function toggleSearch() {
   panel.classList.toggle('visible', isSearchOpen);
   if (isSearchOpen) {
     renderSearchPanel();
+  } else {
+    cleanupLiveInputSync();
+    _performSearchRef = null;
   }
 }
 
+/**
+ * Asocia un listener al editor para mantener actualizados los conteos de búsqueda sin perturbar el foco de escritura.
+ */
+function setupLiveInputSync() {
+  cleanupLiveInputSync();
+  const bodyInput = document.getElementById('bodyInput');
+  if (!bodyInput) return;
+
+  _attachedBodyInput = bodyInput;
+  _bodyInputListener = () => {
+    if (isSearchOpen && searchTerm && _performSearchRef) {
+      _performSearchRef(false); // Actualizar coincidencias silenciosamente sin robar selección
+    }
+  };
+  bodyInput.addEventListener('input', _bodyInputListener);
+}
+
+/**
+ * Remueve el listener del editor.
+ */
+function cleanupLiveInputSync() {
+  if (_attachedBodyInput && _bodyInputListener) {
+    _attachedBodyInput.removeEventListener('input', _bodyInputListener);
+  }
+  _attachedBodyInput = null;
+  _bodyInputListener = null;
+}
+
+/**
+ * Renderiza el panel HTML de búsqueda e inicializa eventos de control.
+ */
 export function renderSearchPanel() {
   const container = document.getElementById('searchPanel');
   if (!container) return;
@@ -44,7 +92,11 @@ export function renderSearchPanel() {
   const replaceInput = document.getElementById('replaceInput');
   const countEl = document.getElementById('searchCount');
 
-  function performSearch() {
+  /**
+   * Realiza la búsqueda y actualiza la lista de coincidencias.
+   * @param {boolean} shouldHighlight Indica si debe seleccionarse visualmente la coincidencia activa.
+   */
+  function performSearch(shouldHighlight = true) {
     searchTerm = searchInput.value;
     const bodyInput = document.getElementById('bodyInput');
     if (!bodyInput || !searchTerm) {
@@ -62,9 +114,20 @@ export function renderSearchPanel() {
       matches.push(idx);
       idx = lowerText.indexOf(lowerTerm, idx + 1);
     }
-    currentMatchIndex = matches.length > 0 ? 0 : -1;
-    countEl.textContent = matches.length > 0 ? `1 de ${matches.length}` : '0 resultados';
-    highlightMatch(bodyInput);
+    
+    // Mantener índice si es factible
+    if (matches.length > 0) {
+      if (currentMatchIndex < 0 || currentMatchIndex >= matches.length) {
+        currentMatchIndex = 0;
+      }
+    } else {
+      currentMatchIndex = -1;
+    }
+
+    countEl.textContent = matches.length > 0 ? `${currentMatchIndex + 1} de ${matches.length}` : '0 resultados';
+    if (shouldHighlight) {
+      highlightMatch(bodyInput);
+    }
   }
 
   function highlightMatch(input) {
@@ -89,22 +152,32 @@ export function renderSearchPanel() {
     highlightMatch(document.getElementById('bodyInput'));
   }
 
+  /**
+   * Reemplaza la coincidencia seleccionada actual tras validar la exactitud del índice.
+   */
   function doReplace() {
-    if (currentMatchIndex < 0 || !searchTerm) return;
+    if (currentMatchIndex < 0 || currentMatchIndex >= matches.length || !searchTerm) return;
     const bodyInput = document.getElementById('bodyInput');
     if (!bodyInput) return;
+    
     const pos = matches[currentMatchIndex];
+    const currentText = bodyInput.value;
+
+    // FIX: Verificar de manera estricta si el texto actual coincide con el término buscado.
+    // Previene la corrupción del documento si el texto fue modificado externamente (desplazando los índices).
+    const actualSlice = currentText.slice(pos, pos + searchTerm.length);
+    if (actualSlice.toLowerCase() !== searchTerm.toLowerCase()) {
+      // Los índices están desactualizados; recalculamos la búsqueda silenciosamente y abortamos.
+      performSearch(false);
+      return;
+    }
+
     replaceTerm = replaceInput.value;
-    const before = bodyInput.value.slice(0, pos);
-    const after = bodyInput.value.slice(pos + searchTerm.length);
+    const before = currentText.slice(0, pos);
+    const after = currentText.slice(pos + searchTerm.length);
     bodyInput.value = before + replaceTerm + after;
     bodyInput.dispatchEvent(new Event('input', { bubbles: true }));
-    performSearch();
-    if (matches.length > 0) {
-      currentMatchIndex = currentMatchIndex % matches.length;
-    }
-    countEl.textContent = matches.length > 0 ? `${currentMatchIndex + 1} de ${matches.length}` : '0 resultados';
-    highlightMatch(document.getElementById('bodyInput'));
+    performSearch(true); // Buscar de nuevo y resaltar la siguiente coincidencia
   }
 
   function doReplaceAll() {
@@ -116,10 +189,10 @@ export function renderSearchPanel() {
     const regex = new RegExp(escaped, 'gi');
     bodyInput.value = bodyInput.value.replace(regex, replaceTerm);
     bodyInput.dispatchEvent(new Event('input', { bubbles: true }));
-    performSearch();
+    performSearch(false); // Actualizar coincidencias silenciosamente
   }
 
-  searchInput.addEventListener('input', performSearch);
+  searchInput.addEventListener('input', () => performSearch(true));
   searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -128,6 +201,7 @@ export function renderSearchPanel() {
     }
     if (e.key === 'Escape') toggleSearch();
   });
+  
   replaceInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -143,9 +217,12 @@ export function renderSearchPanel() {
   document.getElementById('searchReplaceAllBtn').addEventListener('click', doReplaceAll);
   document.getElementById('searchCloseBtn').addEventListener('click', toggleSearch);
 
+  _performSearchRef = performSearch;
+  setupLiveInputSync();
+
   if (searchTerm) {
     searchInput.value = searchTerm;
     replaceInput.value = replaceTerm;
-    performSearch();
+    performSearch(true);
   }
 }

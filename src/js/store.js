@@ -1,12 +1,10 @@
 /**
- * store.js — Abstracción de persistencia.
+ * store.js — Abstración de persistencia y almacenamiento local.
  *
- * Principio OCP: la interfaz (load / save) no cambia.
- * Principio SRP: única responsabilidad = leer y escribir el estado.
+ * Principio OCP: La interfaz pública (load / save) permanece invariante.
+ * Principio SRP: Su única responsabilidad es guardar y leer configuraciones/notas.
  *
- * FIX: Singleton del Store para evitar instancias múltiples por
- * operación, que podían causar condiciones de carrera al guardar
- * simultáneamente notas y configuración.
+ * FIX: Soluciona condición de carrera inicializando el Store usando una promesa cacheada (_storePromise).
  */
 
 const STORE_FILE      = 'notes.json';
@@ -16,27 +14,42 @@ const WINDOWS_KEY     = 'windows-data';
 
 /** @type {import('@tauri-apps/plugin-store').Store | null} */
 let _store = null;
+/** @type {Promise<import('@tauri-apps/plugin-store').Store> | null} */
+let _storePromise = null;
 
 /**
- * Obtiene (o crea) la instancia singleton del Store.
+ * Obtiene la instancia singleton del Store de forma segura y concurrente.
  * @returns {Promise<import('@tauri-apps/plugin-store').Store>}
  */
 async function getStore() {
   if (_store) return _store;
-  let Store;
-  if (window.__TAURI__ && window.__TAURI__.store) {
-    Store = window.__TAURI__.store.Store;
-  } else {
-    const mod = await import('@tauri-apps/plugin-store');
-    Store = mod.Store;
-  }
-  _store = await Store.load(STORE_FILE, { autoSave: false });
-  return _store;
+  if (_storePromise) return _storePromise;
+
+  _storePromise = (async () => {
+    try {
+      let Store;
+      if (window.__TAURI__ && window.__TAURI__.store) {
+        Store = window.__TAURI__.store.Store;
+      } else {
+        const mod = await import('@tauri-apps/plugin-store');
+        Store = mod.Store;
+      }
+      _store = await Store.load(STORE_FILE, { autoSave: false });
+      return _store;
+    } catch (err) {
+      _storePromise = null; // Clear promise cache on error so we can retry next time
+      throw err;
+    }
+  })();
+
+  return _storePromise;
 }
 
 /**
  * Helper interno — persiste un valor en el store.
- * DRY: usado por saveToStore, saveSettingsToStore y saveWindowStates.
+ * Reutilizado por saveToStore, saveSettingsToStore y saveWindowStates (DRY).
+ * @param {string} key
+ * @param {any} data
  */
 async function setStoreValue(key, data) {
   try {
@@ -50,7 +63,9 @@ async function setStoreValue(key, data) {
 
 /**
  * Helper interno — carga un valor del store.
- * DRY: usado por loadFromStore, loadSettingsFromStore y loadWindowStates.
+ * Reutilizado por loadFromStore, loadSettingsFromStore y loadWindowStates (DRY).
+ * @param {string} key
+ * @returns {Promise<any>}
  */
 async function getStoreValue(key) {
   try {
@@ -67,7 +82,7 @@ async function getStoreValue(key) {
 // ─── Notas ───────────────────────────────────────────────────────────────────
 
 /**
- * Carga las notas desde tauri-plugin-store.
+ * Carga las notas persistidas.
  * @returns {Promise<object[] | null>}
  */
 export async function loadFromStore() {
@@ -75,9 +90,8 @@ export async function loadFromStore() {
 }
 
 /**
- * Persiste el array de notas en tauri-plugin-store.
+ * Persiste la lista de notas.
  * @param {object[]} notes
- * @returns {Promise<void>}
  */
 export async function saveToStore(notes) {
   return setStoreValue(NOTES_KEY, notes);
@@ -86,18 +100,16 @@ export async function saveToStore(notes) {
 // ─── Configuración ───────────────────────────────────────────────────────────
 
 /**
- * Carga la configuración desde tauri-plugin-store.
+ * Carga la configuración del usuario.
  * @returns {Promise<object | null>}
  */
 export async function loadSettingsFromStore() {
-  const raw = await getStoreValue(SETTINGS_KEY);
-  return raw;
+  return getStoreValue(SETTINGS_KEY);
 }
 
 /**
- * Persiste la configuración en tauri-plugin-store.
+ * Guarda la configuración del usuario.
  * @param {object} settings
- * @returns {Promise<void>}
  */
 export async function saveSettingsToStore(settings) {
   return setStoreValue(SETTINGS_KEY, settings);
@@ -105,10 +117,18 @@ export async function saveSettingsToStore(settings) {
 
 // ─── Window States ───────────────────────────────────────────────────────────
 
+/**
+ * Guarda las posiciones y geometría de las ventanas.
+ * @param {object[]} states
+ */
 export async function saveWindowStates(states) {
   return setStoreValue(WINDOWS_KEY, states);
 }
 
+/**
+ * Carga las posiciones y geometría de las ventanas.
+ * @returns {Promise<object[] | null>}
+ */
 export async function loadWindowStates() {
   return getStoreValue(WINDOWS_KEY);
 }

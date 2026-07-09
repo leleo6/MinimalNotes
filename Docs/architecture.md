@@ -21,19 +21,24 @@ MinimalNotes utiliza una **arquitectura multi-proceso basada en IPC (Inter-Proce
 ┌─────────────────────────────────────────────────────────────────┐
 │                      WebView (Frontend)                         │
 │                                                                 │
-│  ┌──────────┐ ┌───────┐ ┌───────┐ ┌────────┐ ┌─────────────┐  │
-│  │ main.js  │ │state  │ │store  │ │config  │ │ utils.js    │  │
-│  │(orquest.)│ │ .js   │ │ .js   │ │ .js    │ │ (utilerías) │  │
-│  └──────────┘ └───────┘ └───────┘ └────────┘ └─────────────┘  │
-│  ┌──────────┐ ┌───────┐ ┌───────┐ ┌────────┐ ┌─────────────┐  │
-│  │ notes.js │ │windows│ │history│ │ sync.js│ │ settings.js │  │
-│  │(CRUD)    │ │ .js   │ │ .js   │ │(eventos│ │ (config.)  │  │
-│  └──────────┘ └───────┘ └───────┘ │ multi- │ └─────────────┘  │
-│  ┌──────────┐ ┌───────┐           │window) │ ┌─────────────┐  │
-│  │ ui/      │ │ ui/   │ ┌───────┐ └────────┘ │ ui/         │  │
-│  │sidebar.js│ │tabbar │ │editor │ ┌────────┐ │ search.js   │  │
-│  └──────────┘ │ .js   │ │ .js   │ │ drag.js│ └─────────────┘  │
-│               └───────┘ └───────┘ └────────┘                   │
+│                 ┌─────────────────────────────┐                 │
+│                 │      ipc.js (IPC Adaptador) │                 │
+│                 └─────────────────────────────┘                 │
+│                        ▲               ▲                        │
+│                        │               │                        │
+│  ┌──────────┐ ┌───────┐│┌───────┐ ┌────┴───┐ ┌─────────────┐    │
+│  │ main.js  │ │state  │││store  │ │config  │ │ utils.js    │    │
+│  │(orquest.)│ │ .js   │││ .js   │ │ .js    │ │ (utilerías) │    │
+│  └──────────┘ └───────┘│└───────┘ └────────┘ └─────────────┘    │
+│  ┌──────────┐ ┌───────┐│┌───────┐ ┌────────┐ ┌─────────────┐    │
+│  │ notes.js │ │windows│││history│ │ sync.js│ │ settings.js │    │
+│  │(negocio) │ │ .js   │││ .js   │ │(eventos│ │ (config.)   │    │
+│  └──────────┘ └───────┘│└───────┘ │ sync)  │ └─────────────┘    │
+│  ┌──────────┐ ┌───────┐│          └────────┘ ┌─────────────┐    │
+│  │ ui/      │ │ ui/   │└────────┐ ┌────────┐ │ ui/         │    │
+│  │sidebar.js│ │tabbar │ │editor │ │ drag.js│ │ search.js   │    │
+│  └──────────┘ │ .js   │ │ .js   │ └────────┘ └─────────────┘    │
+│               └───────┘ └───────┘                               │
 └─────────────────────────────────────────────────────────────────┘
                             │
                             ▼
@@ -54,22 +59,22 @@ Crear nota:
   main.js → notes.createNote() → state.addNote()
     → store.saveToStore() (persiste en JSON)
     → ui/sidebar.render() + ui/tabbar.render()
-    → sync.js emite evento "note-created" a otras ventanas
+    → windows.js: emitNoteCreated() → ipc.js: emit() evento "note-created" a otras ventanas
 
 Editar nota:
   editor.js (input) → notes.updateNoteBody(id, body)
     → history.pushSnapshot() (undo/redo)
     → state.updateNote()
-    → store.saveToStore() (debounced 500ms)
-    → sync.js emite "note-updated" a otras ventanas
+    → store.saveToStore() (debounced 500ms con evento 'save-status')
+    → windows.js: emitNoteUpdated() → ipc.js: emit() "note-updated" a otras ventanas
     → ui/tabbar.render() (actualiza excerpt)
-    → ui/editor.js actualiza word count
+    → ui/editor.js actualiza word count e indicador de guardado
 
 Eliminar nota:
   editor.js (botón eliminar) → notes.deleteNote(id)
-    → state.removeNote()
+    → state.removeNote() + history.clearHistory()
     → store.saveToStore()
-    → sync.js emite "note-deleted"
+    → windows.js: emitNoteDeleted() → ipc.js: emit() "note-deleted"
     → ui/sidebar.render() + ui/tabbar.render()
 
 Abrir archivo del sistema:
@@ -126,10 +131,10 @@ MinimalNotes puede leer y escribir archivos reales del sistema a través de los 
 
 Cada ventana se identifica con una etiqueta única (`mn-note-` + noteId). El módulo `windows.js` mantiene un `Map` de ventanas abiertas y persiste su estado geométrico. Cuando una nota se abre en su propia ventana:
 
-1. `windows.js` crea una `WebviewWindow` con la misma URL (`index.html`) y pasa el noteId como query param
-2. La nueva ventana carga `main.js`, detecta el query param y carga solo esa nota
-3. Ambas ventanas se suscriben a eventos de sincronización via `sync.js`
-4. Al cerrar la ventana, se emite `window-note-closed` y la ventana principal actualiza su UI
+1. `windows.js` crea una `WebviewWindow` con la misma URL (`index.html`) y pasa el `noteId` y `window` label como query params
+2. La nueva ventana carga `main.js`, detecta el query param y carga la lista de notas desde el store y activa la nota correspondiente
+3. Ambas ventanas se suscriben a eventos de sincronización a través de `sync.js` (usando `ipc.js`)
+4. Al cerrar la ventana, se emite `window-note-closed` y la ventana principal actualiza su UI de tracking de ventanas
 
 ---
 

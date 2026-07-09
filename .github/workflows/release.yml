@@ -32,7 +32,8 @@ jobs:
             libxdo-dev \
             libssl-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
+            librsvg2-dev \
+            libarchive-tools
 
       - uses: actions/setup-node@v4
         with:
@@ -52,45 +53,20 @@ jobs:
           releaseDraft: true
           allowUpdates: true
 
-  archlinux:
-    needs: [build]
-    runs-on: ubuntu-latest
-    container:
-      image: archlinux:latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        run: |
-          pacman -Syu --noconfirm
-          pacman -S --noconfirm \
-            webkit2gtk-4.1 \
-            gtk3 \
-            base-devel \
-            curl \
-            wget \
-            file \
-            openssl \
-            librsvg \
-            xdotool \
-            nodejs \
-            npm \
-            rust \
-            git
-
-      - run: npm ci
-
-      - run: npm run tauri build -- --no-bundle
-
-      - name: Create .tar.gz and .pkg.tar.zst
+      - name: Package Linux tar.gz and Pacman package
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           cd src-tauri/target/release
+          
+          # 1. Crear el tar.gz portable (basado en GLIBC 2.35 para máxima compatibilidad)
           tar -czf "minimalnotes-linux.tar.gz" minimalnotes
 
+          # 2. Preparar el directorio de empaquetado para Arch Linux
           mkdir -p pkg/usr/bin pkg/usr/share/applications pkg/usr/share/pixmaps
           install -Dm755 minimalnotes pkg/usr/bin/minimalnotes
           install -Dm644 ../../icons/icon.png pkg/usr/share/pixmaps/minimalnotes.png
 
+          # 3. Crear el archivo Desktop Entry
           {
             echo '[Desktop Entry]'
             echo 'Type=Application'
@@ -102,12 +78,13 @@ jobs:
             echo 'Terminal=false'
           } > pkg/usr/share/applications/minimalnotes.desktop
 
+          # 4. Crear el archivo de metadatos .PKGINFO (usando la URL del repositorio actual)
           pkgver="${GITHUB_REF_NAME#v}"
           {
             echo "pkgname = minimalnotes"
             echo "pkgver = ${pkgver}-1"
             echo "pkgdesc = Editor de texto plano ultra-ligero"
-            echo "url = https://github.com/Leo-Codex/NOTES"
+            echo "url = https://github.com/${{ github.repository }}"
             echo "builddate = $(date +%s)"
             echo "packager = MinimalNotes CI"
             echo "size = $(du -sk pkg | cut -f1)"
@@ -118,15 +95,20 @@ jobs:
             echo "depend = glibc"
           } > pkg/.PKGINFO
 
+          # 5. Generar estructura MTREE
           bsdtar -czf pkg/.MTREE --format=mtree \
             --options='!all,use-set,type,uid,gid,mode,size,time,md5,sha256' \
             -C pkg usr/
 
+          # 6. Empaquetar como .pkg.tar.zst nativo de Pacman
           tar --zstd -cf "minimalnotes-arch.pkg.tar.zst" \
             -C pkg .PKGINFO .MTREE usr/
 
-      - uses: softprops/action-gh-release@v2
+      - name: Upload additional Linux assets
+        if: matrix.platform == 'ubuntu-22.04'
+        uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
           files: |
             src-tauri/target/release/minimalnotes-linux.tar.gz
             src-tauri/target/release/minimalnotes-arch.pkg.tar.zst

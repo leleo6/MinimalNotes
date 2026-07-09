@@ -1,15 +1,36 @@
+/**
+ * main.js — Punto de entrada principal y orquestador del frontend.
+ * 
+ * Principio SRP: Responsable único de inicializar la aplicación, orquestar el renderizado
+ * de componentes de UI (sidebar, tabbar, editor) y despachar atajos de teclado globales.
+ * Principio DIP: Depende de ipc.js para abstraer llamadas IPC de Tauri.
+ */
+
 import { setNotes, setActiveId, getActiveNote, addNote, getNotes } from './state.js';
 import { loadFromStore, loadSettingsFromStore, saveToStore } from './store.js';
-import { createNote, createNoteShape, openFileFromSystem, saveActiveNoteToSystem } from './notes.js';
+import { 
+  createNote, 
+  createNoteShape, 
+  openFileFromSystem, 
+  saveActiveNoteToSystem, 
+  openNewNoteWindow 
+} from './notes.js';
 import { CONFIG_DEFAULTS, applyConfigToDOM } from './config.js';
 import { renderSidebar }                              from './ui/sidebar.js';
 import { renderEditor, changeZoom, resetZoom, zoomLevel } from './ui/editor.js';
 import { renderTabbar }                               from './ui/tabbar.js';
 import { toggleSearch }                               from './ui/search.js';
-import { registerCurrentWindow, setupWindowStatePersistence, openNewNoteWindow } from './windows.js';
+import { registerCurrentWindow, setupWindowStatePersistence, emitNoteUpdated, emitNoteCreated } from './windows.js';
 import { registerSyncListeners } from './sync.js';
 import { undo, redo, lockRedoStack } from './history.js';
-import { uid, showTemporalIndicator, getQueryParams } from './utils.js';
+import { showTemporalIndicator, getQueryParams } from './utils.js';
+import { 
+  invoke, 
+  listen, 
+  showMessage, 
+  getCurrentWindowLabel, 
+  createWebviewWindow 
+} from './ipc.js';
 
 const callbacks = {
   async onNewNote() {
@@ -137,8 +158,9 @@ function registerKeyboardShortcuts() {
                        (mods.shift === e.shiftKey);
       if (!modMatch) continue;
 
-      const keys = Array.isArray(sc.key) ? sc.key : [sc.key];
-      if (keys.includes(e.key)) {
+      // FIX: Comparación insensible a mayúsculas/minúsculas para mitigar errores cuando Caps Lock está activo
+      const keys = (Array.isArray(sc.key) ? sc.key : [sc.key]).map(k => k.toLowerCase());
+      if (keys.includes(e.key.toLowerCase())) {
         e.preventDefault();
         await entry.handler();
         return;
@@ -166,15 +188,16 @@ async function handleOpenFilePayload(payload) {
     existing.updatedAt = Date.now();
     setActiveId(existing.id);
     note = existing;
+    emitNoteUpdated(note.id, note.body).catch(() => {});
   } else {
     note = createNoteShape(content, filePath);
     addNote(note);
     setActiveId(note.id);
+    emitNoteCreated(note).catch(() => {});
   }
   await saveToStore(getNotes());
   if (isNew) {
-    const { message } = window.__TAURI__.dialog;
-    await message(`La ruta '${filePath}' no existe.\nSe creará un nuevo archivo al guardar.`, {
+    await showMessage(`La ruta '${filePath}' no existe.\nSe creará un nuevo archivo al guardar.`, {
       title: 'Nuevo archivo',
       kind: 'info'
     });
@@ -188,13 +211,11 @@ async function init() {
   }
   applyConfigToDOM(currentConfig);
 
-  try {
-    window.__TAURI__.event.listen('settings-changed', async ({ payload }) => {
-      currentConfig = { ...CONFIG_DEFAULTS, ...payload };
-      applyConfigToDOM(currentConfig);
-      registerKeyboardShortcuts();
-    });
-  } catch (_) {}
+  listen('settings-changed', async ({ payload }) => {
+    currentConfig = { ...CONFIG_DEFAULTS, ...payload };
+    applyConfigToDOM(currentConfig);
+    registerKeyboardShortcuts();
+  });
 
   const params = getQueryParams();
   let saved = null;
@@ -212,7 +233,7 @@ async function init() {
     await Promise.all(saved.map(async (note) => {
       if (note.filePath) {
         try {
-          const content = await window.__TAURI__.core.invoke('read_file', { path: note.filePath });
+          const content = await invoke('read_file', { path: note.filePath });
           note.body = content;
         } catch (err) {
           console.warn(`[main] no se pudo leer el archivo en ${note.filePath}:`, err);
@@ -222,12 +243,7 @@ async function init() {
   }
 
   if (!saved || !Array.isArray(saved) || saved.length === 0) {
-    saved = [{
-      id: uid(),
-      body: '',
-      updatedAt: Date.now(),
-      filePath: null,
-    }];
+    saved = [createNoteShape()];
   }
 
   saved.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -240,7 +256,7 @@ async function init() {
   setActiveId(initialNoteId);
 
   try {
-    const cliData = await window.__TAURI__.core.invoke('get_startup_file');
+    const cliData = await invoke('get_startup_file');
     if (cliData) {
       await handleOpenFilePayload(cliData);
     }
@@ -266,24 +282,13 @@ async function init() {
     renderAll();
   });
 
-  try {
-    window.__TAURI__.event.listen('open-cli-file', async (event) => {
-      await handleOpenFilePayload(event.payload);
-      renderAll();
-    });
-  } catch (_) {}
+  listen('open-cli-file', async (event) => {
+    await handleOpenFilePayload(event.payload);
+    renderAll();
+  });
 
   registerKeyboardShortcuts();
   renderAll();
-}
-
-function getCurrentWindowLabel() {
-  try {
-    const { getCurrentWindow } = window.__TAURI__.window;
-    return getCurrentWindow().label;
-  } catch (_) {
-    return 'main';
-  }
 }
 
 let currentConfig = { ...CONFIG_DEFAULTS };
@@ -293,8 +298,6 @@ init();
 let _settingsWin = null;
 
 function openSettingsWindow() {
-  const { WebviewWindow } = window.__TAURI__.webviewWindow;
-
   if (_settingsWin) {
     _settingsWin.setFocus().catch(() => {
       _settingsWin = null;
@@ -316,7 +319,7 @@ function openSettingsWindow() {
     shortcuts:   JSON.stringify(currentConfig.shortcuts || {}),
   }).toString();
 
-  _settingsWin = new WebviewWindow('settings', {
+  _settingsWin = createWebviewWindow('settings', {
     url: 'settings.html?' + q,
     title: 'Configuración — MinimalNotes',
     width: 440,
@@ -326,7 +329,9 @@ function openSettingsWindow() {
     decorations: true
   });
 
-  _settingsWin.once('tauri://destroyed', () => {
-    _settingsWin = null;
-  });
+  if (_settingsWin) {
+    _settingsWin.once('tauri://destroyed', () => {
+      _settingsWin = null;
+    });
+  }
 }

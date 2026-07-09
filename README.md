@@ -43,18 +43,21 @@ Built with **Tauri v2** and **Vanilla JavaScript**, MinimalNotes delivers instan
                      |  Tauri IPC Bridge (JSON-RPC)
 +--------------------+------------------------------------------+
 |  WebView (Vanilla JS Frontend)                               |
-|  +------------------+  +---------------+  +---------------+  |
-|  |  Core Modules    |  |  UI Modules   |  |  Persistence  |  |
-|  |  - state.js      |  |  - sidebar.js |  |  - store.js   |  |
-|  |  - notes.js      |  |  - tabbar.js  |  |  (tauri-     |  |
-|  |  - history.js    |  |  - editor.js  |  |   plugin-    |  |
-|  |  - sync.js       |  |  - search.js  |  |   store)     |  |
-|  |  - windows.js    |  |               |  |               |  |
-|  +------------------+  +---------------+  +---------------+  |
+|  +---------------------------------------------------------+  |
+|  |                     ipc.js (IPC Adapter)                |  |
+|  |  +------------------+  +---------------+  +----------+  |  |
+|  |  |  Core Modules    |  |  UI Modules   |  | Persist. |  |  |
+|  |  |  - state.js      |  |  - sidebar.js |  | -store.js|  |  |
+|  |  |  - notes.js      |  |  - tabbar.js  |  |          |  |  |
+|  |  |  - history.js    |  |  - editor.js  |  |          |  |  |
+|  |  |  - sync.js       |  |  - search.js  |  |          |  |  |
+|  |  |  - windows.js    |  |               |  |          |  |  |
+|  |  +------------------+  +---------------+  +----------+  |  |
+|  +---------------------------------------------------------+  |
 +---------------------------------------------------------------+
 ```
 
-The backend (Rust) handles native file access via Tauri IPC commands, while all UI rendering, state management, and business logic live in the frontend. Cross-window synchronization is handled through Tauri's event system, ensuring changes made in one window are reflected in all others in real time.
+The backend (Rust) handles native file access via Tauri IPC commands, while the frontend handles all UI rendering, state management, and business logic. Dependency Inversion is applied using `ipc.js` as an abstraction adapter for all Tauri events and invokes, making core logic decoupled and robust. Cross-window synchronization ensures changes made in one window are reflected in all others in real time.
 
 ---
 
@@ -118,28 +121,27 @@ The resulting packages are placed in `src-tauri/target/release/bundle/`.
 
 > **Note**: Build locally for the platform you're on. Arch Linux packages require Arch Linux (`makepkg`). For automated multi-platform builds, see [Continuous Builds](#continuous-builds).
 
----a
+---
 
 ## Cómo instalar
 
-
-[![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_x64-setup.exe)
-[![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_amd64.AppImage)
-[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes-arch.pkg.tar.zst)
+[![Windows](https://img.shields.io/badge/-Windows_x64-blue?style=for-the-badge&logo=windows)](https://github.com/leleo6/NOTES/releases/latest)
+[![Linux](https://img.shields.io/badge/-Linux-red?style=for-the-badge&logo=linux)](https://github.com/leleo6/NOTES/releases/latest)
+[![Arch Linux](https://img.shields.io/badge/-Arch_Linux-blue?style=for-the-badge&logo=archlinux)](https://github.com/leleo6/NOTES/releases/latest)
 [![All versions](https://img.shields.io/badge/-All_Versions-lightgrey?style=for-the-badge)](https://github.com/leleo6/NOTES/releases)
 
 ### Release files
 
-Los instalables se generan automáticamente al crear una release. En la [página de Releases](https://github.com/leleo6/NOTES/releases) encontrarás:
+Los instalables se generan automáticamente al crear una release. En la [página de la última release](https://github.com/leleo6/NOTES/releases/latest) encontrarás los siguientes archivos listos para descargar:
 
-| Archivo | Plataforma | Instalación |
+| Archivo / Formato | Plataforma | Instalación |
 |---|---|---|
-| [`minimalnotes_0.1.0_x64-setup.exe`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_x64-setup.exe) | **Windows** | Doble clic → siguiente → listo |
-| [`minimalnotes_0.1.0_x64_en-US.msi`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_x64_en-US.msi) | **Windows** | Doble clic → instalar |
-| [`minimalnotes_0.1.0_amd64.AppImage`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_amd64.AppImage) | **Cualquier Linux** | `chmod +x` y ejecutar |
-| [`minimalnotes_0.1.0_amd64.deb`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes_0.1.0_amd64.deb) | **Ubuntu/Debian** | `sudo dpkg -i archivo` |
-| `minimalnotes-linux.tar.gz` | **Cualquier Linux** | Ver instrucciones abajo |
-| [`minimalnotes-arch.pkg.tar.zst`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes-arch.pkg.tar.zst) | **Arch Linux** | `sudo pacman -U archivo` |
+| `minimalnotes_{version}_x64-setup.exe` | **Windows** | Doble clic → siguiente → listo (Descargar desde la release) |
+| `minimalnotes_{version}_x64_en-US.msi` | **Windows** | Doble clic → instalar (Descargar desde la release) |
+| `minimalnotes_{version}_amd64.AppImage` | **Cualquier Linux** | `chmod +x` y ejecutar (Descargar desde la release) |
+| `minimalnotes_{version}_amd64.deb` | **Ubuntu/Debian** | `sudo dpkg -i archivo` (Descargar desde la release) |
+| [`minimalnotes-linux.tar.gz`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes-linux.tar.gz) | **Cualquier Linux** | Descarga directa del portable, extraer y ejecutar |
+| [`minimalnotes-arch.pkg.tar.zst`](https://github.com/leleo6/NOTES/releases/latest/download/minimalnotes-arch.pkg.tar.zst) | **Arch Linux** | Descarga directa del paquete, instalar con `sudo pacman -U` |
 
 ### Windows
 
@@ -204,16 +206,17 @@ MinimalNotes/
 │   ├── fonts/                    # Embedded WOFF2 fonts
 │   └── js/                       # ES6 modules
 │       ├── main.js               # Application orchestrator
-│       ├── state.js              # In-memory state
-│       ├── store.js              # Persistence layer
-│       ├── notes.js              # Note CRUD
-│       ├── history.js            # Undo/redo stacks
+│       ├── ipc.js                # Tauri IPC Adapter (Dependency Inversion)
+│       ├── state.js              # In-memory state (DRY)
+│       ├── store.js              # Persistence layer (thread-safe singleton)
+│       ├── notes.js              # Note CRUD & logic (decoupled)
+│       ├── history.js            # Undo/redo history (DRY & memory leak free)
 │       ├── sync.js               # Cross-window sync
-│       ├── windows.js            # Window management
+│       ├── windows.js            # Window management (layouts & tracking)
 │       ├── utils.js              # Utilities
 │       ├── drag.js               # Drag-to-window
 │       ├── stepper.js            # Stepper UI component
-│       ├── settings.js           # Settings logic
+│       ├── settings.js           # Settings logic (declarative & OCP)
 │       └── ui/                   # UI rendering modules
 ├── src-tauri/                    # Rust backend
 │   ├── Cargo.toml                # Rust dependencies

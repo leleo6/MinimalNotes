@@ -13,6 +13,12 @@ use tauri_plugin_dialog::DialogExt;
 use crate::file_manager;
 use crate::StartupPayload;
 
+/// Extensiones de archivo admitidas para la edición (DRY).
+const TEXT_EXTENSIONS: &[&str] = &[
+    "txt", "md", "py", "rs", "html", "css", "js", "ts", "json", "toml", 
+    "c", "cpp", "h", "hpp", "java", "sh", "yml", "yaml", "xml"
+];
+
 /// Abre un diálogo nativo de "Abrir archivo" y devuelve su contenido.
 ///
 /// # Returns
@@ -22,7 +28,7 @@ pub async fn open_file(app: AppHandle) -> Result<(String, String), String> {
     let path = app
         .dialog()
         .file()
-        .add_filter("Texto", &["txt", "md", "py", "rs", "html", "css", "js", "ts", "json", "toml", "c", "cpp", "h", "hpp", "java", "sh", "yml", "yaml", "xml"])
+        .add_filter("Texto", TEXT_EXTENSIONS)
         .blocking_pick_file()
         .ok_or("Operación cancelada")?;
 
@@ -42,7 +48,7 @@ pub async fn save_file_as(app: AppHandle, content: String) -> Result<String, Str
     let path = app
         .dialog()
         .file()
-        .add_filter("Texto", &["txt", "md", "py", "rs", "html", "css", "js", "ts", "json", "toml", "c", "cpp", "h", "hpp", "java", "sh", "yml", "yaml", "xml"])
+        .add_filter("Texto", TEXT_EXTENSIONS)
         .set_file_name("nota.txt")
         .blocking_save_file()
         .ok_or("Operación cancelada")?;
